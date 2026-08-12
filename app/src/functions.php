@@ -85,3 +85,53 @@ function redirect(string $path): never {
     header('Location: ' . $path);
     exit;
 }
+
+// --- Import CSV --------------------------------------------------------
+
+// I CSV esportati da Excel in locale italiano usano quasi sempre il punto e virgola come
+// separatore (la virgola è il separatore decimale), mentre gli export "internazionali" usano la
+// virgola: si sceglie quello più frequente nella prima riga invece di assumerne uno fisso.
+function detectCsvDelimiter(string $path): string {
+    $handle = fopen($path, 'r');
+    $firstLine = $handle ? (string) fgets($handle) : '';
+    if ($handle) {
+        fclose($handle);
+    }
+    $candidates = [
+        ',' => substr_count($firstLine, ','),
+        ';' => substr_count($firstLine, ';'),
+        "\t" => substr_count($firstLine, "\t"),
+    ];
+    arsort($candidates);
+    $best = array_key_first($candidates);
+    return $candidates[$best] > 0 ? $best : ',';
+}
+
+// Molti CSV esportati da Excel/Windows iniziano con un BOM UTF-8: se non lo si salta, finisce
+// dentro il valore della prima colonna della prima riga (intestazione compresa), che può rompere
+// la validazione email quando l'email è proprio nella prima colonna.
+function openCsvSkippingBom(string $path) {
+    $handle = fopen($path, 'r');
+    if ($handle) {
+        $bom = fread($handle, 3);
+        if ($bom !== "\xEF\xBB\xBF") {
+            rewind($handle);
+        }
+    }
+    return $handle;
+}
+
+// Prova a indovinare a quale colonna corrisponde un campo cercando parole chiave nell'intestazione
+// (utile solo se il CSV ha una riga di intestazione: senza, $columns contiene solo etichette
+// generiche "Colonna N" e nessuna corrisponderà).
+function guessColumnByLabel(array $columns, array $needles): ?int {
+    foreach ($columns as $i => $label) {
+        $normalized = mb_strtolower(trim((string) $label));
+        foreach ($needles as $needle) {
+            if ($normalized === $needle || str_contains($normalized, $needle)) {
+                return $i;
+            }
+        }
+    }
+    return null;
+}
