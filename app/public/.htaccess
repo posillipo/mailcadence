@@ -1,0 +1,8 @@
+Options -Indexes
+
+# Blocca l'accesso diretto a dotfile eventualmente presenti nella webroot (es. .env copiato per
+# errore): src/ e database/ non sono comunque nella webroot, quindi qui è solo una protezione in
+# più.
+<FilesMatch "^\.">
+    Require all denied
+</FilesMatch>

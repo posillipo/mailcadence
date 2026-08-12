@@ -1,0 +1,54 @@
+version: '3.8'
+
+services:
+  db:
+    image: mysql:8.0
+    container_name: ${CONTAINER_NAME:-mailcadence}_db
+    restart: unless-stopped
+    environment:
+      - MYSQL_DATABASE=${DB_NAME:-mailcadence}
+      - MYSQL_USER=${DB_USER:-mailcadence_user}
+      - MYSQL_PASSWORD=${DB_PASSWORD:-cambiami_123}
+      - MYSQL_ROOT_PASSWORD=${DB_ROOT_PASSWORD:-cambiami_root_123}
+    volumes:
+      - db_data:/var/lib/mysql
+    networks:
+      - internal
+
+  app:
+    build:
+      context: .
+      dockerfile: app/Dockerfile
+    container_name: ${CONTAINER_NAME:-mailcadence}_app
+    restart: unless-stopped
+    depends_on:
+      - db
+    expose:
+      - "80"
+    environment:
+      - DB_HOST=db
+      - DB_NAME=${DB_NAME:-mailcadence}
+      - DB_USER=${DB_USER:-mailcadence_user}
+      - DB_PASS=${DB_PASSWORD:-cambiami_123}
+      - APP_SECRET=${APP_SECRET:-cambiami_secret_lungo_e_casuale}
+      - ADMIN_EMAIL=${ADMIN_EMAIL:-}
+      - ADMIN_PASSWORD_HASH=${ADMIN_PASSWORD_HASH:-}
+      - SITE_URL=${SITE_URL:-}
+      - SMTP_HOST=${SMTP_HOST:-}
+      - SMTP_PORT=${SMTP_PORT:-587}
+      - SMTP_USER=${SMTP_USER:-}
+      - SMTP_PASS=${SMTP_PASS:-}
+      - SMTP_SECURE=${SMTP_SECURE:-tls}
+      - SMTP_FROM=${SMTP_FROM:-}
+      - SMTP_FROM_NAME=${SMTP_FROM_NAME:-MailCadence}
+    networks:
+      - internal
+      - proxy-manager_default
+
+volumes:
+  db_data:
+
+networks:
+  internal:
+  proxy-manager_default:
+    external: true

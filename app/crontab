@@ -1,0 +1,7 @@
+# Esegue il worker di invio ogni 5 minuti. È più fine della cadenza reale delle campagne
+# (tipicamente 60-120 minuti, impostata per singola campagna) solo per non far slittare troppo
+# l'orario effettivo di invio rispetto a quello pianificato (vedi src/send_batch.php).
+# I job di /etc/cron.d NON ereditano le variabili d'ambiente del container: vengono scritte in
+# /etc/cron.d/mailcadence.env da docker-entrypoint-wrapper.sh all'avvio e sorgentate qui.
+*/5 * * * * www-data . /etc/cron.d/mailcadence.env && php /var/www/src/send_batch.php >> /var/log/send_batch.log 2>&1
+

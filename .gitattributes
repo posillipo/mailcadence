@@ -1,0 +1,3 @@
+# Normalizza tutti i file di testo con fine riga LF (Unix), evita i warning
+# "LF will be replaced by CRLF" su Windows e mantiene coerenza tra ambienti
+* text=auto eol=lf
