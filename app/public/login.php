@@ -8,6 +8,10 @@ if (isLoggedIn()) {
     redirect('/dashboard.php');
 }
 
+if (!hasAdmin()) {
+    redirect('/setup.php');
+}
+
 $error = null;
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
