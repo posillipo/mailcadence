@@ -32,6 +32,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $pdo->prepare('DELETE FROM contact_list_members WHERE list_id = ? AND contact_id = ?')
             ->execute([$listId, (int) $_POST['contact_id']]);
         flash('success', 'Contatto rimosso dalla lista.');
+    } elseif ($action === 'remove_all') {
+        $pdo->prepare('DELETE FROM contact_list_members WHERE list_id = ?')->execute([$listId]);
+        flash('success', 'Lista svuotata: tutti i contatti sono stati rimossi.');
     }
     redirect('/list_view.php?id=' . $listId);
 }
@@ -106,6 +109,13 @@ require __DIR__ . '/_header.php';
 
 <div class="card">
   <h2>Contatti nella lista</h2>
+  <?php if (!empty($members)): ?>
+    <form method="post" style="margin-bottom:16px">
+      <?= csrfField() ?>
+      <input type="hidden" name="action" value="remove_all">
+      <button class="btn btn-danger" type="submit" onclick="return confirm('Svuotare completamente questa lista? Verranno rimossi tutti i <?= count($members) ?> contatti. L\'azione non è reversibile.');">Svuota lista</button>
+    </form>
+  <?php endif; ?>
   <table>
     <thead><tr><th>Email</th><th>Nome</th><th>Stato</th><th></th></tr></thead>
     <tbody>
