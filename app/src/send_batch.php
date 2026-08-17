@@ -88,7 +88,7 @@ function processCampaign(PDO $pdo, SimpleSmtpMailer $mailer, array $campaign): v
 }
 
 $pdo = getDB();
-$mailer = SimpleSmtpMailer::fromEnv();
+$mailer = SimpleSmtpMailer::fromConfig(effectiveSmtpConfig());
 
 $campaigns = $pdo->query(
     "SELECT * FROM campaigns WHERE status = 'running' AND (next_batch_at IS NULL OR next_batch_at <= NOW())"

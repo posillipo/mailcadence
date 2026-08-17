@@ -1,4 +1,6 @@
 <?php
+require_once __DIR__ . '/functions.php';
+
 /**
  * Client SMTP minimale e autonomo (nessuna dipendenza esterna/Composer), sul modello dello
  * stesso mailer usato in chifacosa. Rispetto a quello, qui il messaggio è sempre
@@ -15,6 +17,7 @@ class SimpleSmtpMailer {
     private string $secure; // 'ssl', 'tls' oppure '' (nessuna cifratura)
     private bool $verifyCert;
     private int $timeout = 15;
+    private string $lastError = '';
 
     public function __construct(string $host, int $port, string $user, string $pass, string $secure = 'tls', bool $verifyCert = true) {
         $this->host = $host;
@@ -25,15 +28,22 @@ class SimpleSmtpMailer {
         $this->verifyCert = $verifyCert;
     }
 
-    public static function fromEnv(): self {
+    public static function fromConfig(array $cfg): self {
         return new self(
-            getenv('SMTP_HOST') ?: '',
-            (int) (getenv('SMTP_PORT') ?: 587),
-            getenv('SMTP_USER') ?: '',
-            getenv('SMTP_PASS') ?: '',
-            getenv('SMTP_SECURE') ?: 'tls',
+            $cfg['host'] ?? '',
+            (int) ($cfg['port'] ?? 587),
+            $cfg['user'] ?? '',
+            $cfg['pass'] ?? '',
+            $cfg['secure'] ?? 'tls',
             true
         );
+    }
+
+    // Dettaglio dell'ultimo errore incontrato da send(), che internamente lo inghiotte
+    // (restituisce solo true/false) per non interrompere mai l'invio di un batch di campagna:
+    // serve solo per la pagina di test SMTP, dove invece l'admin vuole sapere cosa è andato storto.
+    public function lastError(): string {
+        return $this->lastError;
     }
 
     /**
@@ -97,6 +107,7 @@ class SimpleSmtpMailer {
             fclose($socket);
             return true;
         } catch (Exception $e) {
+            $this->lastError = $e->getMessage();
             error_log('[SimpleSmtpMailer] invio a ' . $toEmail . ' fallito: ' . $e->getMessage());
             return false;
         }
@@ -163,4 +174,67 @@ class SimpleSmtpMailer {
         }
         return $response;
     }
+}
+
+// --- Configurazione SMTP -----------------------------------------------------
+//
+// Stesso schema già usato per l'account amministratore (vedi src/auth.php): una riga opzionale
+// nel DB, impostabile dalla pagina /smtp_settings.php, ha priorità sulle variabili SMTP_* del
+// .env. Se non è mai stata salvata nessuna configurazione da interfaccia, si continua a usare
+// quella del .env così i deployment esistenti non richiedono nessuna azione.
+
+function getStoredSmtpSettings(): ?array {
+    $stmt = getDB()->query('SELECT host, port, username, password, secure, from_email, from_name FROM smtp_settings ORDER BY id DESC LIMIT 1');
+    $row = $stmt->fetch();
+    return $row ?: null;
+}
+
+// Configurazione effettivamente in uso in questo momento (per l'invio delle campagne e per i
+// valori precompilati nei form), combinando DB (se presente) e .env.
+function effectiveSmtpConfig(): array {
+    $stored = getStoredSmtpSettings();
+    if ($stored !== null) {
+        return [
+            'host' => $stored['host'],
+            'port' => (int) $stored['port'],
+            'user' => $stored['username'],
+            'pass' => $stored['password'],
+            'secure' => $stored['secure'],
+            'from_email' => $stored['from_email'],
+            'from_name' => $stored['from_name'],
+        ];
+    }
+    return [
+        'host' => getenv('SMTP_HOST') ?: '',
+        'port' => (int) (getenv('SMTP_PORT') ?: 587),
+        'user' => getenv('SMTP_USER') ?: '',
+        'pass' => getenv('SMTP_PASS') ?: '',
+        'secure' => getenv('SMTP_SECURE') ?: 'tls',
+        'from_email' => getenv('SMTP_FROM') ?: '',
+        'from_name' => getenv('SMTP_FROM_NAME') ?: '',
+    ];
+}
+
+// Salva (o aggiorna) la configurazione SMTP nel DB. Una password vuota lascia invariata quella
+// già salvata (o, alla primissima configurazione, quella del .env), per evitare che il form debba
+// per forza mostrarla in chiaro per poterla "confermare" a ogni salvataggio.
+function saveSmtpSettings(array $cfg): void {
+    $pdo = getDB();
+    $existing = getStoredSmtpSettings();
+
+    $password = $cfg['pass'];
+    if ($password === '') {
+        $password = $existing['password'] ?? (getenv('SMTP_PASS') ?: '');
+    }
+
+    if ($existing === null) {
+        $pdo->prepare(
+            'INSERT INTO smtp_settings (host, port, username, password, secure, from_email, from_name) VALUES (?, ?, ?, ?, ?, ?, ?)'
+        )->execute([$cfg['host'], $cfg['port'], $cfg['user'], $password, $cfg['secure'], $cfg['from_email'], $cfg['from_name']]);
+        return;
+    }
+
+    $pdo->prepare(
+        'UPDATE smtp_settings SET host = ?, port = ?, username = ?, password = ?, secure = ?, from_email = ?, from_name = ?'
+    )->execute([$cfg['host'], $cfg['port'], $cfg['user'], $password, $cfg['secure'], $cfg['from_email'], $cfg['from_name']]);
 }

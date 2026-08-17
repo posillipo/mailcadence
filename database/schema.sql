@@ -60,6 +60,20 @@ CREATE TABLE IF NOT EXISTS admins (
   UNIQUE KEY uq_admins_email (email)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+-- Configurazione SMTP impostabile dalla pagina /smtp_settings.php (in alternativa alle variabili
+-- SMTP_* nel .env, che restano comunque supportate). Una sola riga.
+CREATE TABLE IF NOT EXISTS smtp_settings (
+  id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  host VARCHAR(255) NOT NULL,
+  port SMALLINT UNSIGNED NOT NULL,
+  username VARCHAR(255) NOT NULL DEFAULT '',
+  password VARCHAR(255) NOT NULL DEFAULT '',
+  secure ENUM('tls','ssl','') NOT NULL DEFAULT 'tls',
+  from_email VARCHAR(255) NOT NULL,
+  from_name VARCHAR(255) NOT NULL,
+  updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 CREATE TABLE IF NOT EXISTS campaign_recipients (
   id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
   campaign_id INT UNSIGNED NOT NULL,
