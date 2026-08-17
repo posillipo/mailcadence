@@ -20,6 +20,8 @@ Flusso tipico: componi una email → scegli una lista di destinatari → l'app l
   `List-Unsubscribe-Post` per la disiscrizione one-click supportata dai client email moderni
 - Invio SMTP autonomo (nessuna dipendenza Composer) in multipart/alternative (testo + HTML), verso
   il proprio server SMTP
+- Configurazione SMTP modificabile da interfaccia (`/smtp_settings.php`), con invio di una email di
+  test per verificare subito che i parametri siano corretti
 
 ## Stack
 
@@ -55,6 +57,15 @@ in quel caso la pagina di setup resta disattivata fin dal primo avvio.
 
 Il servizio va poi esposto tramite il tuo reverse proxy (es. Nginx Proxy Manager, già collegato
 via rete Docker esterna `proxy-manager_default`) puntando al container `app` sulla porta 80.
+
+### Configurazione SMTP
+
+Le variabili `SMTP_*` nel `.env` restano il modo più semplice per configurare l'invio prima del
+primo avvio, ma da loggato puoi anche gestire/modificare host, porta, cifratura, utente, password
+e mittente dalla pagina **SMTP** in dashboard (`/smtp_settings.php`), che sovrascrive quanto
+impostato nel `.env`. Da lì puoi anche inviare una email di test a un indirizzo a scelta, senza
+dover prima salvare, per verificare subito che i parametri siano corretti prima di lanciare una
+campagna vera.
 
 ## Note anti-spam
 

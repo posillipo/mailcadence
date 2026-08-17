@@ -14,6 +14,7 @@
     <a href="/contacts.php">Contatti</a>
     <a href="/lists.php">Liste</a>
     <a href="/campaigns.php">Campagne</a>
+    <a href="/smtp_settings.php">SMTP</a>
   </nav>
   <a class="logout" href="/logout.php">Esci</a>
 </header>

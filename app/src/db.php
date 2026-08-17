@@ -19,6 +19,7 @@ function ensureSchema(PDO $pdo): void {
     try {
         $pdo->query('SELECT 1 FROM contacts LIMIT 1');
         ensureAdminsTable($pdo);
+        ensureSmtpSettingsTable($pdo);
         return; // schema già presente
     } catch (PDOException $e) {
         // tabella mancante: si procede con l'import qui sotto
@@ -51,6 +52,23 @@ function ensureAdminsTable(PDO $pdo): void {
         password_hash VARCHAR(255) NOT NULL,
         created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
         UNIQUE KEY uq_admins_email (email)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+}
+
+// Stesso discorso di ensureAdminsTable() sopra, ma per la configurazione SMTP impostabile da
+// /smtp_settings.php (vedi src/mailer.php): tabella aggiunta dopo il primo rilascio, creata qui
+// esplicitamente così arriva anche ai deployment già esistenti.
+function ensureSmtpSettingsTable(PDO $pdo): void {
+    $pdo->exec("CREATE TABLE IF NOT EXISTS smtp_settings (
+        id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+        host VARCHAR(255) NOT NULL,
+        port SMALLINT UNSIGNED NOT NULL,
+        username VARCHAR(255) NOT NULL DEFAULT '',
+        password VARCHAR(255) NOT NULL DEFAULT '',
+        secure ENUM('tls','ssl','') NOT NULL DEFAULT 'tls',
+        from_email VARCHAR(255) NOT NULL,
+        from_name VARCHAR(255) NOT NULL,
+        updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
 }
 

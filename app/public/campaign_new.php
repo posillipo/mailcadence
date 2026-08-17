@@ -1,6 +1,7 @@
 <?php
 session_start();
 require_once __DIR__ . '/../src/auth.php';
+require_once __DIR__ . '/../src/mailer.php';
 requireLogin();
 
 $pdo = getDB();
@@ -11,13 +12,14 @@ $lists = $pdo->query(
      FROM contact_lists l ORDER BY l.name"
 )->fetchAll();
 
+$smtpDefaults = effectiveSmtpConfig();
 $error = null;
 $defaults = [
     'name' => '',
     'list_id' => '',
     'subject' => '',
-    'from_name' => getenv('SMTP_FROM_NAME') ?: '',
-    'from_email' => getenv('SMTP_FROM') ?: '',
+    'from_name' => $smtpDefaults['from_name'],
+    'from_email' => $smtpDefaults['from_email'],
     'body_html' => '',
     'batch_size' => 50,
     'interval_minutes' => 60,
