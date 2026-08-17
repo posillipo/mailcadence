@@ -72,6 +72,7 @@ require __DIR__ . '/_header.php';
 </div>
 
 <div class="card">
+  <div class="table-scroll">
   <table>
     <thead><tr><th>Email</th><th>Nome</th><th>Stato</th><th>Aggiunto</th><th></th></tr></thead>
     <tbody>
@@ -115,6 +116,7 @@ require __DIR__ . '/_header.php';
     <?php endif; ?>
     </tbody>
   </table>
+  </div>
   <?php if ($totalPages > 1): ?>
     <div class="actions">
       <?php for ($p = 1; $p <= $totalPages; $p++): ?>

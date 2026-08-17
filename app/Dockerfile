@@ -32,6 +32,14 @@ RUN { \
       echo 'post_max_size = 10M'; \
     } > /usr/local/etc/php/conf.d/uploads.ini
 
+# Fuso orario dell'app (non del sistema operativo del container, che resta UTC): tutti gli orari
+# mostrati in dashboard e usati per pianificare i batch delle campagne sono pensati per un utente
+# in Italia. Il DB (src/db.php) allinea la propria sessione allo stesso fuso a ogni connessione,
+# così i valori NOW()/DATE_ADD() di MySQL e i date()/strtotime() di PHP restano coerenti tra loro.
+RUN { \
+      echo 'date.timezone = Europe/Rome'; \
+    } > /usr/local/etc/php/conf.d/timezone.ini
+
 RUN { \
       echo 'display_errors = Off'; \
       echo 'display_startup_errors = Off'; \

@@ -72,6 +72,7 @@ require __DIR__ . '/_header.php';
   <div class="progress" style="margin-top:12px"><div style="width:<?= $pct ?>%"></div></div>
   <p class="hint"><?= $pct ?>% completato su <?= $total ?> destinatari totali.</p>
 
+  <div class="table-scroll">
   <table style="margin-top:12px">
     <tr><th>Lista</th><td><?= e($campaign['list_name']) ?></td></tr>
     <tr><th>Oggetto</th><td><?= e($campaign['subject']) ?></td></tr>
@@ -81,6 +82,7 @@ require __DIR__ . '/_header.php';
     <tr><th>Avviata il</th><td><?= formatDateIt($campaign['started_at']) ?></td></tr>
     <tr><th>Completata il</th><td><?= formatDateIt($campaign['completed_at']) ?></td></tr>
   </table>
+  </div>
 
   <div class="actions">
     <?php if ($campaign['status'] === 'draft'): ?>
@@ -112,6 +114,7 @@ require __DIR__ . '/_header.php';
 
 <div class="card">
   <h2>Invii recenti</h2>
+  <div class="table-scroll">
   <table>
     <thead><tr><th>Email</th><th>Stato</th><th>Quando</th></tr></thead>
     <tbody>
@@ -127,5 +130,6 @@ require __DIR__ . '/_header.php';
     <?php endif; ?>
     </tbody>
   </table>
+  </div>
 </div>
 <?php require __DIR__ . '/_footer.php'; ?>

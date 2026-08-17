@@ -36,6 +36,7 @@ require __DIR__ . '/_header.php';
   <?php if (empty($campaigns)): ?>
     <p class="hint">Nessuna campagna ancora. <a href="/campaign_new.php">Creane una</a>.</p>
   <?php else: ?>
+    <div class="table-scroll">
     <table>
       <thead><tr><th>Nome</th><th>Stato</th><th>Avanzamento</th><th>Prossimo batch</th><th></th></tr></thead>
       <tbody>
@@ -50,6 +51,7 @@ require __DIR__ . '/_header.php';
       <?php endforeach; ?>
       </tbody>
     </table>
+    </div>
   <?php endif; ?>
 </div>
 <?php require __DIR__ . '/_footer.php'; ?>
