@@ -72,6 +72,17 @@ function ensureSmtpSettingsTable(PDO $pdo): void {
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
 }
 
+// Scostamento UTC corrente (es. "+02:00") per il fuso orario dell'app (vedi date.timezone in
+// Dockerfile), calcolato da PHP invece che affidato a "SET time_zone = 'Europe/Rome'" lato MySQL:
+// quest'ultimo richiederebbe le tabelle di fuso orario caricate nel server MySQL, che su un DB
+// condiviso con un'altra applicazione (non gestito da questo repo) potrebbero non esserci. Uno
+// scostamento numerico invece funziona sempre, e viene ricalcolato a ogni connessione così tiene
+// conto da solo del passaggio tra ora legale e solare.
+function appTimezoneOffset(): string {
+    $offset = (new DateTime('now', new DateTimeZone('Europe/Rome')))->format('P');
+    return preg_match('/^[+-]\d{2}:\d{2}$/', $offset) ? $offset : '+00:00';
+}
+
 function getDB(): PDO {
     static $pdo = null;
     if ($pdo === null) {
@@ -82,6 +93,7 @@ function getDB(): PDO {
             PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
             PDO::MYSQL_ATTR_INIT_COMMAND => "SET NAMES utf8mb4",
         ]);
+        $pdo->exec("SET time_zone = '" . appTimezoneOffset() . "'");
         ensureSchema($pdo);
     }
     return $pdo;
