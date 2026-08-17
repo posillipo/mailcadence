@@ -78,7 +78,12 @@ class SimpleSmtpMailer {
             }
             stream_set_timeout($socket, $this->timeout);
 
-            $heloHost = $_SERVER['HTTP_HOST'] ?? 'localhost';
+            // Il dominio del mittente, non l'host HTTP della richiesta: quest'ultimo può includere
+            // una porta (es. "1.2.3.4:8086") o essere del tutto assente quando send() viene
+            // chiamato dal worker cron (niente $_SERVER['HTTP_HOST'] fuori da un contesto web),
+            // e alcuni server SMTP (Aruba compreso) rifiutano con "501 EHLO requires valid
+            // address" un argomento che non sia un hostname valido.
+            $heloHost = $this->heloHostFor($fromEmail);
 
             $this->expect($socket, 220);
             $this->command($socket, "EHLO {$heloHost}", 250);
@@ -111,6 +116,15 @@ class SimpleSmtpMailer {
             error_log('[SimpleSmtpMailer] invio a ' . $toEmail . ' fallito: ' . $e->getMessage());
             return false;
         }
+    }
+
+    private function heloHostFor(string $fromEmail): string {
+        $at = strrpos($fromEmail, '@');
+        if ($at === false) {
+            return 'localhost';
+        }
+        $domain = substr($fromEmail, $at + 1);
+        return $domain !== '' ? $domain : 'localhost';
     }
 
     private function buildMessage(
