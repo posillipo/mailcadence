@@ -15,6 +15,7 @@
     <a href="/lists.php">Liste</a>
     <a href="/campaigns.php">Campagne</a>
     <a href="/smtp_settings.php">SMTP</a>
+    <a href="/cron_status.php">Worker</a>
   </nav>
   <a class="logout" href="/logout.php">Esci</a>
 </header>
