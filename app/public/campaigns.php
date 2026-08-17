@@ -23,6 +23,7 @@ require __DIR__ . '/_header.php';
 </div>
 
 <div class="card">
+  <div class="table-scroll">
   <table>
     <thead><tr><th>Nome</th><th>Lista</th><th>Stato</th><th>Avanzamento</th><th>Cadenza</th><th></th></tr></thead>
     <tbody>
@@ -41,5 +42,6 @@ require __DIR__ . '/_header.php';
     <?php endif; ?>
     </tbody>
   </table>
+  </div>
 </div>
 <?php require __DIR__ . '/_footer.php'; ?>

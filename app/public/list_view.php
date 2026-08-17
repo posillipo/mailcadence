@@ -82,6 +82,7 @@ require __DIR__ . '/_header.php';
     <div class="actions"><button class="btn btn-secondary" type="submit">Cerca</button></div>
   </form>
   <?php if ($q !== ''): ?>
+    <div class="table-scroll">
     <table>
       <thead><tr><th>Email</th><th>Nome</th><th></th></tr></thead>
       <tbody>
@@ -104,6 +105,7 @@ require __DIR__ . '/_header.php';
       <?php endif; ?>
       </tbody>
     </table>
+    </div>
   <?php endif; ?>
 </div>
 
@@ -116,6 +118,7 @@ require __DIR__ . '/_header.php';
       <button class="btn btn-danger" type="submit" onclick="return confirm('Svuotare completamente questa lista? Verranno rimossi tutti i <?= count($members) ?> contatti. L\'azione non è reversibile.');">Svuota lista</button>
     </form>
   <?php endif; ?>
+  <div class="table-scroll">
   <table>
     <thead><tr><th>Email</th><th>Nome</th><th>Stato</th><th></th></tr></thead>
     <tbody>
@@ -139,5 +142,6 @@ require __DIR__ . '/_header.php';
     <?php endif; ?>
     </tbody>
   </table>
+  </div>
 </div>
 <?php require __DIR__ . '/_footer.php'; ?>
