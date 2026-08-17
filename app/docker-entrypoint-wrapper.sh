@@ -13,7 +13,12 @@ for var in DB_HOST DB_NAME DB_USER DB_PASS APP_SECRET SITE_URL ADMIN_EMAIL ADMIN
     esc=$(printf '%s' "$val" | sed "s/'/'\\\\''/g")
     echo "export ${var}='${esc}'" >> /etc/cron.d/mailcadence.env
 done
-chmod 600 /etc/cron.d/mailcadence.env
+# Il job in app/crontab gira come utente www-data (non root), quindi deve poter LEGGERE questo
+# file per sorgentarlo: 600 (solo root) glielo impediva con un "Permission denied" silenzioso, che
+# per via dell'"&&" nel crontab faceva fallire l'intera riga prima ancora di lanciare
+# send_batch.php — il worker automatico non partiva mai, pur restando cron attivo nel container.
+chown root:www-data /etc/cron.d/mailcadence.env
+chmod 640 /etc/cron.d/mailcadence.env
 
 service cron start
 
