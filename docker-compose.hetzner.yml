@@ -1,0 +1,43 @@
+version: "3.8"
+
+# Variante di docker-compose.yml per un deploy tramite lo stack "Repository" di Portainer che usa
+# un database MySQL già esistente sul server (rete Docker esterna condivisa) invece di crearne uno
+# nuovo — a differenza di docker-compose.yml alla radice, che include il proprio servizio "db".
+# Nessun segreto va scritto qui: valorizza le variabili qui sotto nelle "Environment variables"
+# dello stack in Portainer.
+
+services:
+  app:
+    build:
+      context: .
+      dockerfile: app/Dockerfile
+    container_name: mailcadence_app
+    restart: unless-stopped
+    ports:
+      - "${APP_PORT:-8086}:80"
+    environment:
+      - DB_HOST=${DB_HOST}
+      - DB_NAME=${DB_NAME:-mailcadence}
+      - DB_USER=${DB_USER}
+      - DB_PASS=${DB_PASS}
+      - APP_SECRET=${APP_SECRET}
+      - ADMIN_EMAIL=${ADMIN_EMAIL:-}
+      - ADMIN_PASSWORD_HASH=${ADMIN_PASSWORD_HASH:-}
+      - SITE_URL=${SITE_URL:-}
+      - SMTP_HOST=${SMTP_HOST}
+      - SMTP_PORT=${SMTP_PORT:-587}
+      - SMTP_USER=${SMTP_USER}
+      - SMTP_PASS=${SMTP_PASS}
+      - SMTP_SECURE=${SMTP_SECURE:-tls}
+      - SMTP_FROM=${SMTP_FROM}
+      - SMTP_FROM_NAME=${SMTP_FROM_NAME:-MailCadence}
+    networks:
+      - myband_net
+      - proxy-manager_default
+
+networks:
+  myband_net:
+    external: true
+    name: myband2_myband_net
+  proxy-manager_default:
+    external: true
