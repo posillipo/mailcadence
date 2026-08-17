@@ -22,9 +22,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     } elseif ($action === 'delete' && $id > 0) {
         $pdo->prepare('DELETE FROM contacts WHERE id = ?')->execute([$id]);
         flash('success', 'Contatto eliminato.');
+    } elseif ($action === 'add_to_list' && $id > 0 && !empty($_POST['list_id'])) {
+        $pdo->prepare('INSERT IGNORE INTO contact_list_members (list_id, contact_id) VALUES (?, ?)')
+            ->execute([(int) $_POST['list_id'], $id]);
+        flash('success', 'Contatto aggiunto alla lista.');
     }
     redirect('/contacts.php' . (isset($_GET['q']) ? '?q=' . urlencode($_GET['q']) : ''));
 }
+
+$allLists = $pdo->query('SELECT id, name FROM contact_lists ORDER BY name')->fetchAll();
 
 $q = trim($_GET['q'] ?? '');
 $page = max(1, (int) ($_GET['page'] ?? 1));
@@ -60,6 +66,9 @@ require __DIR__ . '/_header.php';
     <a class="btn" href="/contact_add.php">+ Aggiungi contatto</a>
     <a class="btn btn-secondary" href="/contacts_import.php">Importa da CSV</a>
   </div>
+  <?php if (empty($allLists)): ?>
+    <p class="hint">Non hai ancora nessuna lista: <a href="/lists.php">creane una</a> per poter aggiungere rapidamente i contatti dalla tabella qui sotto.</p>
+  <?php endif; ?>
 </div>
 
 <div class="card">
@@ -85,6 +94,19 @@ require __DIR__ . '/_header.php';
             <input type="hidden" name="id" value="<?= (int) $c['id'] ?>">
             <button class="btn btn-danger" type="submit">Elimina</button>
           </form>
+          <?php if (!empty($allLists)): ?>
+            <form method="post" style="display:inline-flex; gap:4px">
+              <?= csrfField() ?>
+              <input type="hidden" name="action" value="add_to_list">
+              <input type="hidden" name="id" value="<?= (int) $c['id'] ?>">
+              <select name="list_id" style="width:auto">
+                <?php foreach ($allLists as $l): ?>
+                  <option value="<?= (int) $l['id'] ?>"><?= e($l['name']) ?></option>
+                <?php endforeach; ?>
+              </select>
+              <button class="btn btn-secondary" type="submit">Aggiungi a lista</button>
+            </form>
+          <?php endif; ?>
         </td>
       </tr>
     <?php endforeach; ?>
