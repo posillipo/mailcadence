@@ -43,14 +43,16 @@ $minutesAgo = $lastRun !== null ? (int) round((time() - $lastRun) / 60) : null;
 $logTail = '';
 if ($logExists) {
     $size = filesize(SEND_BATCH_LOG);
-    $handle = fopen(SEND_BATCH_LOG, 'r');
-    if ($handle) {
-        $readFrom = max(0, $size - 20000);
-        fseek($handle, $readFrom);
-        $logTail = fread($handle, $size - $readFrom);
-        fclose($handle);
-        if ($readFrom > 0) {
-            $logTail = "[...log troncato, mostrate solo le ultime righe...]\n" . $logTail;
+    if ($size > 0) {
+        $handle = fopen(SEND_BATCH_LOG, 'r');
+        if ($handle) {
+            $readFrom = max(0, $size - 20000);
+            fseek($handle, $readFrom);
+            $logTail = fread($handle, $size - $readFrom);
+            fclose($handle);
+            if ($readFrom > 0) {
+                $logTail = "[...log troncato, mostrate solo le ultime righe...]\n" . $logTail;
+            }
         }
     }
 }
