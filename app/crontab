@@ -3,5 +3,9 @@
 # l'orario effettivo di invio rispetto a quello pianificato (vedi src/send_batch.php).
 # I job di /etc/cron.d NON ereditano le variabili d'ambiente del container: vengono scritte in
 # /etc/cron.d/mailcadence.env da docker-entrypoint-wrapper.sh all'avvio e sorgentate qui.
+# PATH esplicito: cron usa di default un PATH minimo (senza /usr/local/bin), che non include il
+# punto in cui l'immagine ufficiale PHP installa il binario "php" — senza questa riga cron fallisce
+# con "php: not found" pur avendo trovato ed eseguito correttamente il resto della riga.
+PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 */5 * * * * www-data . /etc/cron.d/mailcadence.env && php /var/www/src/send_batch.php >> /var/log/send_batch.log 2>&1
 
