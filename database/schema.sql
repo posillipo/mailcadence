@@ -50,6 +50,16 @@ CREATE TABLE IF NOT EXISTS campaigns (
   CONSTRAINT fk_campaigns_list FOREIGN KEY (list_id) REFERENCES contact_lists(id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+-- Account amministratore creato tramite la pagina /setup.php al primo avvio (in alternativa a
+-- ADMIN_EMAIL/ADMIN_PASSWORD_HASH nel .env, che restano comunque supportate). Una sola riga.
+CREATE TABLE IF NOT EXISTS admins (
+  id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  email VARCHAR(255) NOT NULL,
+  password_hash VARCHAR(255) NOT NULL,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE KEY uq_admins_email (email)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 CREATE TABLE IF NOT EXISTS campaign_recipients (
   id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
   campaign_id INT UNSIGNED NOT NULL,

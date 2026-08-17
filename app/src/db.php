@@ -18,6 +18,7 @@ function getDbCredentials(): array {
 function ensureSchema(PDO $pdo): void {
     try {
         $pdo->query('SELECT 1 FROM contacts LIMIT 1');
+        ensureAdminsTable($pdo);
         return; // schema già presente
     } catch (PDOException $e) {
         // tabella mancante: si procede con l'import qui sotto
@@ -37,6 +38,20 @@ function ensureSchema(PDO $pdo): void {
         }
         $pdo->exec($statement);
     }
+}
+
+// La tabella "admins" (account creato da /setup.php) è stata aggiunta dopo il primo rilascio:
+// va creata esplicitamente qui, non solo in schema.sql, così i deployment già esistenti (dove
+// "contacts" c'è già e l'import completo sopra non viene rieseguito) la ricevono comunque al
+// prossimo avvio.
+function ensureAdminsTable(PDO $pdo): void {
+    $pdo->exec("CREATE TABLE IF NOT EXISTS admins (
+        id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+        email VARCHAR(255) NOT NULL,
+        password_hash VARCHAR(255) NOT NULL,
+        created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE KEY uq_admins_email (email)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
 }
 
 function getDB(): PDO {
