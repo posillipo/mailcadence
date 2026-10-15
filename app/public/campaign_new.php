@@ -12,14 +12,16 @@ $lists = $pdo->query(
      FROM contact_lists l ORDER BY l.name"
 )->fetchAll();
 
-$smtpDefaults = effectiveSmtpConfig();
+// Solo per precompilare il form: l'invio vero userà il profilo SMTP legato alla lista scelta
+// (vedi src/mailer.php: smtpConfigForList()), non necessariamente questo.
+$defaultProfile = getDefaultSmtpProfile();
 $error = null;
 $defaults = [
     'name' => '',
     'list_id' => '',
     'subject' => '',
-    'from_name' => $smtpDefaults['from_name'],
-    'from_email' => $smtpDefaults['from_email'],
+    'from_name' => $defaultProfile['from_name'] ?? (getenv('SMTP_FROM_NAME') ?: ''),
+    'from_email' => $defaultProfile['from_email'] ?? (getenv('SMTP_FROM') ?: ''),
     'body_html' => '',
     'batch_size' => 50,
     'interval_minutes' => 60,

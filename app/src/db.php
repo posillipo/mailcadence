@@ -19,7 +19,7 @@ function ensureSchema(PDO $pdo): void {
     try {
         $pdo->query('SELECT 1 FROM contacts LIMIT 1');
         ensureAdminsTable($pdo);
-        ensureSmtpSettingsTable($pdo);
+        ensureSmtpProfilesTable($pdo);
         return; // schema già presente
     } catch (PDOException $e) {
         // tabella mancante: si procede con l'import qui sotto
@@ -55,12 +55,15 @@ function ensureAdminsTable(PDO $pdo): void {
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
 }
 
-// Stesso discorso di ensureAdminsTable() sopra, ma per la configurazione SMTP impostabile da
-// /smtp_settings.php (vedi src/mailer.php): tabella aggiunta dopo il primo rilascio, creata qui
-// esplicitamente così arriva anche ai deployment già esistenti.
-function ensureSmtpSettingsTable(PDO $pdo): void {
-    $pdo->exec("CREATE TABLE IF NOT EXISTS smtp_settings (
+// Tabella dei profili SMTP (vedi src/mailer.php) e colonna contact_lists.smtp_profile_id per
+// assegnarne uno specifico a una lista: aggiunte dopo i primi rilasci (che avevano una sola
+// configurazione SMTP, tabella "smtp_settings"), quindi create/migrate qui esplicitamente così
+// arrivano anche ai deployment già esistenti, dove "contacts" c'è già e l'import completo di
+// schema.sql non viene rieseguito.
+function ensureSmtpProfilesTable(PDO $pdo): void {
+    $pdo->exec("CREATE TABLE IF NOT EXISTS smtp_profiles (
         id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+        name VARCHAR(255) NOT NULL,
         host VARCHAR(255) NOT NULL,
         port SMALLINT UNSIGNED NOT NULL,
         username VARCHAR(255) NOT NULL DEFAULT '',
@@ -68,8 +71,61 @@ function ensureSmtpSettingsTable(PDO $pdo): void {
         secure ENUM('tls','ssl','') NOT NULL DEFAULT 'tls',
         from_email VARCHAR(255) NOT NULL,
         from_name VARCHAR(255) NOT NULL,
-        updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+        is_default TINYINT(1) UNSIGNED NOT NULL DEFAULT 0,
+        created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+        UNIQUE KEY uq_smtp_profiles_name (name)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+
+    $colExists = $pdo->query(
+        "SELECT COUNT(*) FROM information_schema.COLUMNS
+         WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'contact_lists' AND COLUMN_NAME = 'smtp_profile_id'"
+    )->fetchColumn();
+    if ((int) $colExists === 0) {
+        $pdo->exec('ALTER TABLE contact_lists ADD COLUMN smtp_profile_id INT UNSIGNED NULL AFTER description');
+    }
+
+    $fkExists = $pdo->query(
+        "SELECT COUNT(*) FROM information_schema.TABLE_CONSTRAINTS
+         WHERE CONSTRAINT_SCHEMA = DATABASE() AND TABLE_NAME = 'contact_lists'
+           AND CONSTRAINT_NAME = 'fk_contact_lists_smtp_profile' AND CONSTRAINT_TYPE = 'FOREIGN KEY'"
+    )->fetchColumn();
+    if ((int) $fkExists === 0) {
+        $pdo->exec(
+            'ALTER TABLE contact_lists ADD CONSTRAINT fk_contact_lists_smtp_profile
+             FOREIGN KEY (smtp_profile_id) REFERENCES smtp_profiles(id) ON DELETE SET NULL'
+        );
+    }
+
+    migrateLegacySmtpSettings($pdo);
+}
+
+// Se esiste ancora la vecchia tabella "smtp_settings" (configurazione unica, pre-profili) e non è
+// mai stato creato nessun profilo, la trasforma nel primo profilo (predefinito): così chi aveva
+// già configurato e testato l'SMTP prima di questo aggiornamento non se lo ritrova vuoto.
+function migrateLegacySmtpSettings(PDO $pdo): void {
+    $hasProfiles = (int) $pdo->query('SELECT COUNT(*) FROM smtp_profiles')->fetchColumn();
+    if ($hasProfiles > 0) {
+        return;
+    }
+    try {
+        $legacy = $pdo->query(
+            'SELECT host, port, username, password, secure, from_email, from_name FROM smtp_settings ORDER BY id DESC LIMIT 1'
+        )->fetch();
+    } catch (PDOException $e) {
+        return; // tabella smtp_settings assente: deployment nuovo, mai esistita prima dei profili
+    }
+    if ($legacy === false) {
+        return;
+    }
+    $pdo->prepare(
+        'INSERT INTO smtp_profiles (name, host, port, username, password, secure, from_email, from_name, is_default)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1)'
+    )->execute([
+        'Predefinito',
+        $legacy['host'], $legacy['port'], $legacy['username'], $legacy['password'],
+        $legacy['secure'], $legacy['from_email'], $legacy['from_name'],
+    ]);
 }
 
 // Scostamento UTC corrente (es. "+02:00") per il fuso orario dell'app (vedi date.timezone in

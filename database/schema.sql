@@ -12,11 +12,34 @@ CREATE TABLE IF NOT EXISTS contacts (
   UNIQUE KEY uq_contacts_email (email)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+-- Profili SMTP impostabili dalla pagina /smtp_settings.php (in alternativa alle variabili SMTP_*
+-- nel .env, che restano comunque supportate come profilo di ripiego se non ne esiste nessuno).
+-- Più di uno: ogni lista può usarne uno specifico (vedi contact_lists.smtp_profile_id) per poter
+-- inviare con un server/mittente diverso a seconda della lista di destinatari.
+CREATE TABLE IF NOT EXISTS smtp_profiles (
+  id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  name VARCHAR(255) NOT NULL,
+  host VARCHAR(255) NOT NULL,
+  port SMALLINT UNSIGNED NOT NULL,
+  username VARCHAR(255) NOT NULL DEFAULT '',
+  password VARCHAR(255) NOT NULL DEFAULT '',
+  secure ENUM('tls','ssl','') NOT NULL DEFAULT 'tls',
+  from_email VARCHAR(255) NOT NULL,
+  from_name VARCHAR(255) NOT NULL,
+  is_default TINYINT(1) UNSIGNED NOT NULL DEFAULT 0,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  UNIQUE KEY uq_smtp_profiles_name (name)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 CREATE TABLE IF NOT EXISTS contact_lists (
   id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
   name VARCHAR(255) NOT NULL,
   description VARCHAR(500) NULL,
-  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+  -- NULL = usa il profilo SMTP predefinito al momento dell'invio, non uno fissato qui.
+  smtp_profile_id INT UNSIGNED NULL,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  CONSTRAINT fk_contact_lists_smtp_profile FOREIGN KEY (smtp_profile_id) REFERENCES smtp_profiles(id) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS contact_list_members (
@@ -58,20 +81,6 @@ CREATE TABLE IF NOT EXISTS admins (
   password_hash VARCHAR(255) NOT NULL,
   created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   UNIQUE KEY uq_admins_email (email)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-
--- Configurazione SMTP impostabile dalla pagina /smtp_settings.php (in alternativa alle variabili
--- SMTP_* nel .env, che restano comunque supportate). Una sola riga.
-CREATE TABLE IF NOT EXISTS smtp_settings (
-  id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
-  host VARCHAR(255) NOT NULL,
-  port SMALLINT UNSIGNED NOT NULL,
-  username VARCHAR(255) NOT NULL DEFAULT '',
-  password VARCHAR(255) NOT NULL DEFAULT '',
-  secure ENUM('tls','ssl','') NOT NULL DEFAULT 'tls',
-  from_email VARCHAR(255) NOT NULL,
-  from_name VARCHAR(255) NOT NULL,
-  updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS campaign_recipients (

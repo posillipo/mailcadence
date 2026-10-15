@@ -20,8 +20,9 @@ Flusso tipico: componi una email → scegli una lista di destinatari → l'app l
   `List-Unsubscribe-Post` per la disiscrizione one-click supportata dai client email moderni
 - Invio SMTP autonomo (nessuna dipendenza Composer) in multipart/alternative (testo + HTML), verso
   il proprio server SMTP
-- Configurazione SMTP modificabile da interfaccia (`/smtp_settings.php`), con invio di una email di
-  test per verificare subito che i parametri siano corretti
+- Più profili SMTP configurabili da interfaccia (`/smtp_settings.php`), con invio di una email di
+  test per verificare subito che i parametri siano corretti; ogni lista di contatti può usare un
+  profilo specifico (server/mittente diverso), altrimenti si usa quello predefinito
 
 ## Stack
 
@@ -61,11 +62,13 @@ via rete Docker esterna `proxy-manager_default`) puntando al container `app` sul
 ### Configurazione SMTP
 
 Le variabili `SMTP_*` nel `.env` restano il modo più semplice per configurare l'invio prima del
-primo avvio, ma da loggato puoi anche gestire/modificare host, porta, cifratura, utente, password
-e mittente dalla pagina **SMTP** in dashboard (`/smtp_settings.php`), che sovrascrive quanto
-impostato nel `.env`. Da lì puoi anche inviare una email di test a un indirizzo a scelta, senza
-dover prima salvare, per verificare subito che i parametri siano corretti prima di lanciare una
-campagna vera.
+primo avvio (usate come ripiego se non esiste ancora nessun profilo). Da loggato, dalla pagina
+**SMTP** in dashboard (`/smtp_settings.php`) puoi creare più **profili SMTP** (ognuno con il
+proprio host/porta/cifratura/utente/password/mittente), marcarne uno come predefinito, e inviare
+da ciascuno una email di test senza doverlo prima salvare. Dalla pagina di una lista
+(`list_view.php`) puoi poi assegnarle un profilo specifico: le campagne inviate su quella lista
+useranno quel profilo invece del predefinito — utile per separare, ad esempio, l'SMTP di una
+newsletter clienti da quello usato per comunicazioni interne.
 
 ## Note anti-spam
 
