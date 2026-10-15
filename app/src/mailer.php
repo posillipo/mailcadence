@@ -190,33 +190,64 @@ class SimpleSmtpMailer {
     }
 }
 
-// --- Configurazione SMTP -----------------------------------------------------
+// --- Profili SMTP --------------------------------------------------------------
 //
-// Stesso schema già usato per l'account amministratore (vedi src/auth.php): una riga opzionale
-// nel DB, impostabile dalla pagina /smtp_settings.php, ha priorità sulle variabili SMTP_* del
-// .env. Se non è mai stata salvata nessuna configurazione da interfaccia, si continua a usare
-// quella del .env così i deployment esistenti non richiedono nessuna azione.
+// Più profili possibili (tabella smtp_profiles), ciascuno con le proprie credenziali/mittente.
+// Una lista può essere agganciata a un profilo specifico (contact_lists.smtp_profile_id): quando
+// si invia una campagna su quella lista si usa quel profilo invece del predefinito. Se non esiste
+// ancora nessun profilo si continua a usare le variabili SMTP_* del .env, così un deployment
+// nuovo resta utilizzabile senza passare per forza dall'interfaccia.
 
-function getStoredSmtpSettings(): ?array {
-    $stmt = getDB()->query('SELECT host, port, username, password, secure, from_email, from_name FROM smtp_settings ORDER BY id DESC LIMIT 1');
-    $row = $stmt->fetch();
+function listSmtpProfiles(): array {
+    return getDB()->query('SELECT * FROM smtp_profiles ORDER BY name')->fetchAll();
+}
+
+function getSmtpProfile(int $id): ?array {
+    $stmt = getDB()->prepare('SELECT * FROM smtp_profiles WHERE id = ?');
+    $stmt->execute([$id]);
+    return $stmt->fetch() ?: null;
+}
+
+// Il profilo predefinito: quello marcato esplicitamente, oppure il primo esistente come ripiego
+// (così c'è sempre un predefinito sensato non appena esiste almeno un profilo), oppure null se non
+// ne è ancora stato creato nessuno.
+function getDefaultSmtpProfile(): ?array {
+    $row = getDB()->query("SELECT * FROM smtp_profiles WHERE is_default = 1 ORDER BY id LIMIT 1")->fetch();
+    if ($row) {
+        return $row;
+    }
+    $row = getDB()->query('SELECT * FROM smtp_profiles ORDER BY id LIMIT 1')->fetch();
     return $row ?: null;
 }
 
-// Configurazione effettivamente in uso in questo momento (per l'invio delle campagne e per i
-// valori precompilati nei form), combinando DB (se presente) e .env.
-function effectiveSmtpConfig(): array {
-    $stored = getStoredSmtpSettings();
-    if ($stored !== null) {
-        return [
-            'host' => $stored['host'],
-            'port' => (int) $stored['port'],
-            'user' => $stored['username'],
-            'pass' => $stored['password'],
-            'secure' => $stored['secure'],
-            'from_email' => $stored['from_email'],
-            'from_name' => $stored['from_name'],
-        ];
+function smtpProfileToConfig(array $profile): array {
+    return [
+        'host' => $profile['host'],
+        'port' => (int) $profile['port'],
+        'user' => $profile['username'],
+        'pass' => $profile['password'],
+        'secure' => $profile['secure'],
+        'from_email' => $profile['from_email'],
+        'from_name' => $profile['from_name'],
+    ];
+}
+
+// Configurazione da usare per inviare su una determinata lista: il profilo assegnato alla lista,
+// altrimenti il predefinito, altrimenti (nessun profilo configurato) le variabili del .env.
+function smtpConfigForList(?int $listId): array {
+    $profile = null;
+    if ($listId !== null) {
+        $stmt = getDB()->prepare(
+            'SELECT p.* FROM contact_lists l JOIN smtp_profiles p ON p.id = l.smtp_profile_id WHERE l.id = ?'
+        );
+        $stmt->execute([$listId]);
+        $profile = $stmt->fetch() ?: null;
+    }
+    if ($profile === null) {
+        $profile = getDefaultSmtpProfile();
+    }
+    if ($profile !== null) {
+        return smtpProfileToConfig($profile);
     }
     return [
         'host' => getenv('SMTP_HOST') ?: '',
@@ -229,26 +260,43 @@ function effectiveSmtpConfig(): array {
     ];
 }
 
-// Salva (o aggiorna) la configurazione SMTP nel DB. Una password vuota lascia invariata quella
-// già salvata (o, alla primissima configurazione, quella del .env), per evitare che il form debba
-// per forza mostrarla in chiaro per poterla "confermare" a ogni salvataggio.
-function saveSmtpSettings(array $cfg): void {
+function createSmtpProfile(array $cfg): int {
     $pdo = getDB();
-    $existing = getStoredSmtpSettings();
+    $isFirst = (int) $pdo->query('SELECT COUNT(*) FROM smtp_profiles')->fetchColumn() === 0;
+    $pdo->prepare(
+        'INSERT INTO smtp_profiles (name, host, port, username, password, secure, from_email, from_name, is_default)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)'
+    )->execute([
+        $cfg['name'], $cfg['host'], $cfg['port'], $cfg['user'], $cfg['pass'],
+        $cfg['secure'], $cfg['from_email'], $cfg['from_name'], $isFirst ? 1 : 0,
+    ]);
+    return (int) $pdo->lastInsertId();
+}
 
+// Una password vuota lascia invariata quella già salvata, per evitare che il form debba per forza
+// mostrarla in chiaro per poterla "confermare" a ogni salvataggio.
+function updateSmtpProfile(int $id, array $cfg): void {
+    $pdo = getDB();
     $password = $cfg['pass'];
     if ($password === '') {
-        $password = $existing['password'] ?? (getenv('SMTP_PASS') ?: '');
+        $existing = getSmtpProfile($id);
+        $password = $existing['password'] ?? '';
     }
-
-    if ($existing === null) {
-        $pdo->prepare(
-            'INSERT INTO smtp_settings (host, port, username, password, secure, from_email, from_name) VALUES (?, ?, ?, ?, ?, ?, ?)'
-        )->execute([$cfg['host'], $cfg['port'], $cfg['user'], $password, $cfg['secure'], $cfg['from_email'], $cfg['from_name']]);
-        return;
-    }
-
     $pdo->prepare(
-        'UPDATE smtp_settings SET host = ?, port = ?, username = ?, password = ?, secure = ?, from_email = ?, from_name = ?'
-    )->execute([$cfg['host'], $cfg['port'], $cfg['user'], $password, $cfg['secure'], $cfg['from_email'], $cfg['from_name']]);
+        'UPDATE smtp_profiles SET name = ?, host = ?, port = ?, username = ?, password = ?, secure = ?, from_email = ?, from_name = ? WHERE id = ?'
+    )->execute([$cfg['name'], $cfg['host'], $cfg['port'], $cfg['user'], $password, $cfg['secure'], $cfg['from_email'], $cfg['from_name'], $id]);
+}
+
+// Le liste che puntano al profilo eliminato tornano da sole al predefinito grazie all'FK
+// ON DELETE SET NULL (vedi src/db.php), non serve aggiornarle qui esplicitamente.
+function deleteSmtpProfile(int $id): void {
+    getDB()->prepare('DELETE FROM smtp_profiles WHERE id = ?')->execute([$id]);
+}
+
+function setDefaultSmtpProfile(int $id): void {
+    $pdo = getDB();
+    $pdo->beginTransaction();
+    $pdo->exec('UPDATE smtp_profiles SET is_default = 0');
+    $pdo->prepare('UPDATE smtp_profiles SET is_default = 1 WHERE id = ?')->execute([$id]);
+    $pdo->commit();
 }

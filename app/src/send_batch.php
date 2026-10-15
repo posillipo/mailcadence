@@ -16,8 +16,11 @@ if (!$lockFile || !flock($lockFile, LOCK_EX | LOCK_NB)) {
     exit(0);
 }
 
-function processCampaign(PDO $pdo, SimpleSmtpMailer $mailer, array $campaign): void {
+function processCampaign(PDO $pdo, array $campaign): void {
     $campaignId = (int) $campaign['id'];
+    // Il profilo SMTP dipende dalla lista della campagna (vedi src/mailer.php): così campagne su
+    // liste diverse possono uscire da server/mittenti diversi.
+    $mailer = SimpleSmtpMailer::fromConfig(smtpConfigForList((int) $campaign['list_id']));
 
     // I destinatari il cui contatto non è più attivo (disiscritto nel frattempo, o segnato come
     // bounced) non verranno mai inviati: li segniamo come "skipped" così non restano "pending"
@@ -88,14 +91,13 @@ function processCampaign(PDO $pdo, SimpleSmtpMailer $mailer, array $campaign): v
 }
 
 $pdo = getDB();
-$mailer = SimpleSmtpMailer::fromConfig(effectiveSmtpConfig());
 
 $campaigns = $pdo->query(
     "SELECT * FROM campaigns WHERE status = 'running' AND (next_batch_at IS NULL OR next_batch_at <= NOW())"
 )->fetchAll();
 
 foreach ($campaigns as $campaign) {
-    processCampaign($pdo, $mailer, $campaign);
+    processCampaign($pdo, $campaign);
 }
 
 flock($lockFile, LOCK_UN);

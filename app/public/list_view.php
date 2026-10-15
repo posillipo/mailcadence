@@ -1,6 +1,7 @@
 <?php
 session_start();
 require_once __DIR__ . '/../src/auth.php';
+require_once __DIR__ . '/../src/mailer.php';
 requireLogin();
 
 $pdo = getDB();
@@ -18,7 +19,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     checkCsrf();
     $action = $_POST['action'] ?? '';
 
-    if ($action === 'add_all_active') {
+    if ($action === 'set_smtp_profile') {
+        $profileId = (int) ($_POST['smtp_profile_id'] ?? 0);
+        $pdo->prepare('UPDATE contact_lists SET smtp_profile_id = ? WHERE id = ?')
+            ->execute([$profileId > 0 ? $profileId : null, $listId]);
+        flash('success', 'Profilo SMTP della lista aggiornato.');
+    } elseif ($action === 'add_all_active') {
         $pdo->prepare(
             "INSERT IGNORE INTO contact_list_members (list_id, contact_id)
              SELECT ?, id FROM contacts WHERE status = 'active'"
@@ -61,11 +67,36 @@ if ($q !== '') {
     $searchResults = $search->fetchAll();
 }
 
+$smtpProfiles = listSmtpProfiles();
+$defaultProfile = getDefaultSmtpProfile();
+
 $pageTitle = e($list['name']) . ' — MailCadence';
 require __DIR__ . '/_header.php';
 ?>
 <h1><?= e($list['name']) ?> <span class="hint">(<?= count($members) ?> contatti)</span></h1>
 <?php if ($list['description']): ?><p class="hint"><?= e($list['description']) ?></p><?php endif; ?>
+
+<div class="card">
+  <h2>Profilo SMTP per questa lista</h2>
+  <?php if (empty($smtpProfiles)): ?>
+    <p class="hint">Nessun profilo SMTP configurato ancora. <a href="/smtp_settings.php">Creane uno</a> per poter scegliere con quale server/mittente inviare le campagne su questa lista.</p>
+  <?php else: ?>
+    <form method="post" style="display:flex; gap:8px; align-items:flex-end; flex-wrap:wrap">
+      <?= csrfField() ?>
+      <input type="hidden" name="action" value="set_smtp_profile">
+      <div style="flex:1; min-width:220px">
+        <label for="smtp_profile_id">Profilo da usare per le campagne su questa lista</label>
+        <select id="smtp_profile_id" name="smtp_profile_id">
+          <option value="0">— usa il predefinito<?= $defaultProfile ? ' (' . e($defaultProfile['name']) . ')' : '' ?> —</option>
+          <?php foreach ($smtpProfiles as $p): ?>
+            <option value="<?= (int) $p['id'] ?>" <?= (int) $list['smtp_profile_id'] === (int) $p['id'] ? 'selected' : '' ?>><?= e($p['name']) ?></option>
+          <?php endforeach; ?>
+        </select>
+      </div>
+      <div><button class="btn btn-secondary" type="submit">Salva</button></div>
+    </form>
+  <?php endif; ?>
+</div>
 
 <div class="card">
   <h2>Aggiungi contatti</h2>
