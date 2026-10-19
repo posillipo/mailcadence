@@ -34,42 +34,66 @@ class Farmadati_Client {
     }
 
     /**
-     * Scarica il WSDL tramite wp_remote_get() e lo salva in un file temporaneo.
-     * Restituisce il percorso locale o WP_Error.
+     * Scarica il WSDL tramite wp_remote_get() e lo salva in un file locale.
+     * Prova ?singleWsdl e poi ?wsdl. Restituisce il percorso locale o WP_Error.
      */
     private function fetch_wsdl( $wsdl_url, $cache_key ) {
         $upload_dir = wp_upload_dir();
         $cache_file = trailingslashit( $upload_dir['basedir'] ) . 'farmadati-wsdl-' . $cache_key . '.xml';
 
-        // Usa la cache se il file esiste ed è recente (meno di 24 ore)
-        if ( file_exists( $cache_file ) && ( time() - filemtime( $cache_file ) ) < DAY_IN_SECONDS ) {
-            return $cache_file;
+        // Invalida la cache se il file salvato non è XML valido
+        if ( file_exists( $cache_file ) ) {
+            $cached = file_get_contents( $cache_file, false, null, 0, 100 );
+            $is_xml = $cached && ( strpos( $cached, '<?xml' ) === 0 || strpos( $cached, '<wsdl' ) === 0 || strpos( $cached, '<definitions' ) !== false );
+            if ( $is_xml && ( time() - filemtime( $cache_file ) ) < DAY_IN_SECONDS ) {
+                return $cache_file;
+            }
+            // Cache non valida: cancella
+            @unlink( $cache_file );
         }
 
-        $response = wp_remote_get( $wsdl_url, [
-            'timeout'   => 30,
-            'sslverify' => true,
-        ] );
-
-        if ( is_wp_error( $response ) ) {
-            // Prova senza verifica SSL in caso di problemi di certificato
-            $response = wp_remote_get( $wsdl_url, [
-                'timeout'   => 30,
-                'sslverify' => false,
-            ] );
+        // Prova prima ?singleWsdl, poi ?wsdl
+        $urls_to_try = [ $wsdl_url ];
+        if ( strpos( $wsdl_url, 'singleWsdl' ) !== false ) {
+            $urls_to_try[] = str_replace( 'singleWsdl', 'wsdl', $wsdl_url );
         }
 
-        if ( is_wp_error( $response ) ) {
-            return $response;
+        foreach ( $urls_to_try as $url ) {
+            foreach ( [ true, false ] as $sslverify ) {
+                $response = wp_remote_get( $url, [
+                    'timeout'   => 30,
+                    'sslverify' => $sslverify,
+                ] );
+
+                if ( is_wp_error( $response ) ) {
+                    continue;
+                }
+
+                $code = wp_remote_retrieve_response_code( $response );
+                $body = wp_remote_retrieve_body( $response );
+
+                if ( $code !== 200 || empty( $body ) ) {
+                    continue;
+                }
+
+                // Verifica che sia XML
+                $start = ltrim( substr( $body, 0, 200 ) );
+                if ( strpos( $start, '<?xml' ) !== 0 && strpos( $start, '<wsdl' ) !== 0 && strpos( $start, '<definitions' ) === false ) {
+                    // Non è XML — salva il debug e continua
+                    update_option( 'farmadati_wsdl_debug', substr( $body, 0, 500 ) );
+                    continue;
+                }
+
+                file_put_contents( $cache_file, $body );
+                return $cache_file;
+            }
         }
 
-        $body = wp_remote_retrieve_body( $response );
-        if ( empty( $body ) ) {
-            return new WP_Error( 'empty_wsdl', 'WSDL vuoto o non raggiungibile: ' . $wsdl_url );
-        }
-
-        file_put_contents( $cache_file, $body );
-        return $cache_file;
+        $debug = get_option( 'farmadati_wsdl_debug', '' );
+        $hint  = $debug ? ' Risposta server: ' . esc_html( substr( $debug, 0, 200 ) ) : '';
+        return new WP_Error( 'wsdl_unavailable',
+            'Impossibile scaricare il WSDL da ' . $wsdl_url . '.' . $hint
+        );
     }
 
     private function client_m1() {
