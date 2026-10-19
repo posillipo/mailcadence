@@ -567,10 +567,14 @@ class Farmadati_Admin {
         <div class="wrap farmadati-wrap">
             <h1><span class="dashicons dashicons-upload"></span> Farmadati – Sincronizzazione CSV</h1>
 
+            <div class="notice notice-info" style="margin-bottom:16px;">
+                <p>Percorso atteso per il file CSV:<br>
+                <code><?php echo esc_html( Farmadati_CSV_Sync::get_csv_path() ); ?></code></p>
+            </div>
+
             <?php if ( ! $stats['csv_exists'] ) : ?>
                 <div class="notice notice-error">
-                    <p><strong>File CSV non trovato.</strong> Il file deve essere depositato in:
-                    <code><?php echo esc_html( Farmadati_CSV_Sync::get_csv_path() ); ?></code></p>
+                    <p><strong>File CSV non trovato.</strong> Carica il file nel percorso indicato sopra.</p>
                 </div>
             <?php endif; ?>
 

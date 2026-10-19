@@ -43,7 +43,22 @@ function farmadati_wc_activate() {
     if ( ! wp_next_scheduled( 'farmadati_daily_sync' ) ) {
         wp_schedule_event( strtotime( 'tomorrow 03:00:00' ), 'daily', 'farmadati_daily_sync' );
     }
+    farmadati_wc_ensure_scambiodati_dir();
 }
+
+function farmadati_wc_ensure_scambiodati_dir() {
+    $dir = rtrim( ABSPATH, '/' ) . '/scambiodati';
+    if ( ! is_dir( $dir ) ) {
+        wp_mkdir_p( $dir );
+    }
+    // Impedisce il listing della cartella
+    $htaccess = $dir . '/.htaccess';
+    if ( ! file_exists( $htaccess ) ) {
+        file_put_contents( $htaccess, "Options -Indexes\nDeny from all\n" );
+    }
+}
+
+add_action( 'admin_init', 'farmadati_wc_ensure_scambiodati_dir' );
 
 register_deactivation_hook( __FILE__, 'farmadati_wc_deactivate' );
 function farmadati_wc_deactivate() {
