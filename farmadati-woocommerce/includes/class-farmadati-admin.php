@@ -363,10 +363,17 @@ class Farmadati_Admin {
     // -------------------------------------------------------------------------
 
     public static function ajax_test_connection() {
+        ob_start();
         check_ajax_referer( 'farmadati_nonce', 'nonce' );
 
         if ( ! current_user_can( 'manage_options' ) ) {
+            ob_end_clean();
             wp_send_json_error( 'Permessi insufficienti.' );
+        }
+
+        if ( ! extension_loaded( 'soap' ) ) {
+            ob_end_clean();
+            wp_send_json_error( 'Estensione PHP SOAP non installata. Contatta il tuo hosting.' );
         }
 
         $options  = get_option( 'farmadati_wc_options', [] );
@@ -374,14 +381,22 @@ class Farmadati_Admin {
         $password = $options['password'] ?? '';
 
         if ( empty( $username ) || empty( $password ) ) {
-            wp_send_json_error( 'Credenziali non configurate.' );
+            ob_end_clean();
+            wp_send_json_error( 'Credenziali non configurate. Vai in Impostazioni e salva username e password.' );
         }
 
-        $client = new Farmadati_Client( $username, $password );
-        $result = $client->test_connection();
+        try {
+            $client = new Farmadati_Client( $username, $password );
+            $result = $client->test_connection();
+        } catch ( Throwable $t ) {
+            ob_end_clean();
+            wp_send_json_error( 'Errore PHP: ' . $t->getMessage() );
+        }
+
+        $stray = ob_get_clean();
 
         if ( is_wp_error( $result ) ) {
-            wp_send_json_error( $result->get_error_message() );
+            wp_send_json_error( $result->get_error_message() . ( $stray ? ' [output: ' . esc_html( substr( $stray, 0, 200 ) ) . ']' : '' ) );
         }
 
         wp_send_json_success( 'Connessione riuscita! Credenziali valide.' );
