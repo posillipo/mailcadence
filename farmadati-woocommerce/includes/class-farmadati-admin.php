@@ -127,9 +127,20 @@ class Farmadati_Admin {
         $tables_available = [
             'TE001' => 'TE001 – Parafarmaci e Dispositivi Medici',
             'TE002' => 'TE002 – Medicinali SOP/OTC (autorizzazione richiesta)',
+            'TE003' => 'TE003 – Integratori Alimentari',
+            'TE004' => 'TE004 – Cosmetici',
+            'TE005' => 'TE005 – Dietetici',
             'TE006' => 'TE006 – Omeopatici',
+            'TE007' => 'TE007 – Galenici e Preparazioni',
+            'TE008' => 'TE008 – Presidi Medico-Chirurgici',
+            'TE009' => 'TE009 – Erboristeria',
+            'TE010' => 'TE010 – Articoli Sanitari',
             'TE011' => 'TE011 – Medicinali Veterinari',
+            'TE012' => 'TE012 – Prodotti per Animali',
+            'TE013' => 'TE013 – Diagnostici',
+            'TE014' => 'TE014 – Ottico e Accessori',
             'TE015' => 'TE015 – Medicinali Veterinari SOP',
+            'TE016' => 'TE016 – Prodotti per la Casa',
         ];
         $sync_tables = $options['sync_tables'] ?? [ 'TE001' ];
         ?>
@@ -212,9 +223,20 @@ class Farmadati_Admin {
         $tables = [
             'TE001' => 'Parafarmaci / Dispositivi Medici',
             'TE002' => 'Medicinali SOP/OTC',
+            'TE003' => 'Integratori Alimentari',
+            'TE004' => 'Cosmetici',
+            'TE005' => 'Dietetici',
             'TE006' => 'Omeopatici',
-            'TE011' => 'Veterinari',
-            'TE015' => 'Veterinari SOP',
+            'TE007' => 'Galenici e Preparazioni',
+            'TE008' => 'Presidi Medico-Chirurgici',
+            'TE009' => 'Erboristeria',
+            'TE010' => 'Articoli Sanitari',
+            'TE011' => 'Medicinali Veterinari',
+            'TE012' => 'Prodotti per Animali',
+            'TE013' => 'Diagnostici',
+            'TE014' => 'Ottico e Accessori',
+            'TE015' => 'Medicinali Veterinari SOP',
+            'TE016' => 'Prodotti per la Casa',
         ];
         ?>
         <div class="wrap">
