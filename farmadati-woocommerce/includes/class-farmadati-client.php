@@ -6,11 +6,11 @@
  */
 class Farmadati_Client {
 
-    const ENDPOINT_M1 = 'https://webservices.farmadati.it/WS2S/FarmadatItaliaWebServicesM1.svc';
-    const ENDPOINT_M2 = 'https://webservices.farmadati.it/WS2S/FarmadatItaliaWebServicesM2.svc';
+    const ENDPOINT_M1 = 'http://webservices-farmadati.dyndns.ws/WS2/FarmadatiItaliaWebServicesM1.svc';
+    const ENDPOINT_M2 = 'http://webservices-farmadati.dyndns.ws/WS2/FarmadatiItaliaWebServicesM2.svc';
 
-    const WSDL_M1 = 'https://webservices.farmadati.it/WS2S/FarmadatItaliaWebServicesM1.svc?singleWsdl';
-    const WSDL_M2 = 'https://webservices.farmadati.it/WS2S/FarmadatItaliaWebServicesM2.svc?singleWsdl';
+    const WSDL_M1 = 'http://webservices-farmadati.dyndns.ws/WS2/FarmadatiItaliaWebServicesM1.svc?singleWsdl';
+    const WSDL_M2 = 'http://webservices-farmadati.dyndns.ws/WS2/FarmadatiItaliaWebServicesM2.svc?singleWsdl';
 
     private $username;
     private $password;
@@ -34,10 +34,17 @@ class Farmadati_Client {
     }
 
     /**
-     * Scarica il WSDL tramite wp_remote_get() e lo salva in un file locale.
-     * Prova ?singleWsdl e poi ?wsdl. Restituisce il percorso locale o WP_Error.
+     * Restituisce il percorso del file WSDL: prima cerca la copia locale nel plugin,
+     * poi prova il download remoto come fallback.
      */
     private function fetch_wsdl( $wsdl_url, $cache_key ) {
+        // Usa il file WSDL incluso nel plugin (più affidabile)
+        $local = FARMADATI_WC_PLUGIN_DIR . 'wsdl/' . strtoupper( $cache_key ) . '.wsdl';
+        if ( file_exists( $local ) ) {
+            return $local;
+        }
+
+        // Fallback: download remoto
         $upload_dir = wp_upload_dir();
         $cache_file = trailingslashit( $upload_dir['basedir'] ) . 'farmadati-wsdl-' . $cache_key . '.xml';
 
