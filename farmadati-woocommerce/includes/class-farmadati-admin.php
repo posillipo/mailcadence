@@ -291,18 +291,8 @@ class Farmadati_Admin {
             <div id="fd-results-wrap" style="display:none;">
                 <h2>Risultati (<span id="fd-results-count">0</span> prodotti trovati)</h2>
                 <div id="fd-results-notice"></div>
-                <table class="wp-list-table widefat fixed striped" id="fd-results-table">
-                    <thead>
-                        <tr>
-                            <th>Codice PARAF</th>
-                            <th>Nome Prodotto</th>
-                            <th>EAN</th>
-                            <th>Prezzo</th>
-                            <th>IVA</th>
-                            <th>In Commercio</th>
-                            <th>Azione</th>
-                        </tr>
-                    </thead>
+                <table class="wp-list-table widefat striped" id="fd-results-table">
+                    <thead id="fd-results-head"></thead>
                     <tbody id="fd-results-body"></tbody>
                 </table>
                 <div id="fd-pagination" style="margin-top:10px;"></div>
@@ -455,9 +445,9 @@ class Farmadati_Admin {
 
         $result = $client->execute_query(
             $table,
-            [ 'FDI_0001', 'FDI_0002', 'FDI_0004', 'FDI_9007', 'FDI_0248', 'FDI_0245', 'FDI_0040' ],
+            [ 'ALL' ],
             [ [ 'key' => $field_key, 'operator' => $operator, 'value' => $query, 'or_group' => 0 ] ],
-            [ [ 'key' => 'FDI_0004', 'order_type' => 'CRESCENTE' ] ],
+            [],
             $page,
             20
         );

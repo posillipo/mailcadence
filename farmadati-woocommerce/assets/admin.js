@@ -44,29 +44,44 @@
     // -------------------------------------------------------------------------
     var currentPage = 1;
 
+    var resultFields = [];
+
+    function buildHeaders(records) {
+        if (!records || records.length === 0) { return ''; }
+        var keys = Object.keys(records[0]).filter(function (k) {
+            return k.indexOf('_wc_') !== 0;
+        });
+        resultFields = keys;
+        var html = '<tr>';
+        $.each(keys, function (i, k) { html += '<th>' + escHtml(k) + '</th>'; });
+        html += '<th>Azione</th></tr>';
+        return html;
+    }
+
     function buildRows(records) {
         if (!records || records.length === 0) {
-            return '<tr><td colspan="7">Nessun risultato trovato.</td></tr>';
+            return '<tr><td colspan="8">Nessun risultato trovato.</td></tr>';
         }
 
         var html = '';
         $.each(records, function (i, r) {
-            var commercio = r.FDI_0245 === 'S'
-                ? '<span class="farmadati-badge farmadati-badge--on">Sì</span>'
-                : '<span class="farmadati-badge farmadati-badge--off">No</span>';
-
             var btnLabel = r._wc_id ? 'Aggiorna' : 'Importa';
             var editLink = r._wc_id
                 ? ' <a href="' + escHtml(r._wc_edit) + '" class="button button-small" target="_blank">Modifica</a>'
                 : '';
 
             html += '<tr>';
-            html += '<td>' + escHtml(r.FDI_0001 || '') + '</td>';
-            html += '<td>' + escHtml(r.FDI_0004 || '') + '</td>';
-            html += '<td>' + escHtml(r.FDI_0002 || '') + '</td>';
-            html += '<td>' + escHtml(r.FDI_9007 || '') + '</td>';
-            html += '<td>' + escHtml(r.FDI_0248 || '') + '%</td>';
-            html += '<td>' + commercio + '</td>';
+            $.each(resultFields, function (j, k) {
+                var val = r[k] !== undefined ? r[k] : '';
+                if (k === 'FDI_0245') {
+                    val = val === 'S'
+                        ? '<span class="farmadati-badge farmadati-badge--on">Sì</span>'
+                        : '<span class="farmadati-badge farmadati-badge--off">No</span>';
+                    html += '<td>' + val + '</td>';
+                } else {
+                    html += '<td>' + escHtml(String(val)) + '</td>';
+                }
+            });
             html += '<td>';
             html += '<button class="button button-primary fd-import-btn" data-record=\'' + JSON.stringify(r) + '\'>' + btnLabel + '</button>';
             html += editLink;
@@ -107,6 +122,7 @@
             var data = res.data;
             $('#fd-results-count').text(data.total || data.records.length);
             $('#fd-results-notice').html('');
+            $('#fd-results-head').html(buildHeaders(data.records));
             $('#fd-results-body').html(buildRows(data.records));
             $wrap.show();
 
