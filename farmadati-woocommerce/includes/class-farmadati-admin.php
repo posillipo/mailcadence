@@ -452,6 +452,21 @@ class Farmadati_Admin {
             20
         );
 
+        // Se il campo non esiste nella tabella, riprova con FDI_0004 (nome prodotto)
+        if ( is_wp_error( $result ) && $field_key !== 'FDI_0004' ) {
+            $msg = $result->get_error_message();
+            if ( strpos( $msg, 'nome di colonna' ) !== false || strpos( $msg, 'EXITPOINT' ) !== false ) {
+                $result = $client->execute_query(
+                    $table,
+                    [ 'ALL' ],
+                    [ [ 'key' => 'FDI_0004', 'operator' => 'CONTIENE', 'value' => $query, 'or_group' => 0 ] ],
+                    [],
+                    $page,
+                    20
+                );
+            }
+        }
+
         if ( is_wp_error( $result ) ) {
             wp_send_json_error( $result->get_error_message() );
         }
