@@ -15,6 +15,8 @@ class Farmadati_Admin {
         add_action( 'wp_ajax_farmadati_get_schema', [ __CLASS__, 'ajax_get_schema' ] );
         add_action( 'wp_ajax_farmadati_import_product', [ __CLASS__, 'ajax_import_product' ] );
         add_action( 'wp_ajax_farmadati_run_sync', [ __CLASS__, 'ajax_run_sync' ] );
+        add_action( 'wp_ajax_farmadati_csv_sync', [ __CLASS__, 'ajax_csv_sync' ] );
+        add_action( 'wp_ajax_farmadati_csv_enrich', [ __CLASS__, 'ajax_csv_enrich' ] );
     }
 
     public static function add_menu() {
@@ -39,7 +41,16 @@ class Farmadati_Admin {
 
         add_submenu_page(
             'farmadati-wc',
-            'Sincronizzazione',
+            'Sincronizzazione CSV',
+            'Sincronizzazione CSV',
+            'manage_woocommerce',
+            'farmadati-wc-csv',
+            [ __CLASS__, 'render_csv_page' ]
+        );
+
+        add_submenu_page(
+            'farmadati-wc',
+            'Sincronizzazione Farmadati',
             'Sincronizzazione',
             'manage_woocommerce',
             'farmadati-wc-sync',
@@ -536,6 +547,142 @@ class Farmadati_Admin {
         } else {
             $result = Farmadati_Sync::incremental_sync( $table );
         }
+
+        if ( is_wp_error( $result ) ) {
+            wp_send_json_error( $result->get_error_message() );
+        }
+
+        wp_send_json_success( $result );
+    }
+
+    // -------------------------------------------------------------------------
+    // Pagina Sincronizzazione CSV
+    // -------------------------------------------------------------------------
+
+    public static function render_csv_page() {
+        $stats     = Farmadati_CSV_Sync::get_stats();
+        $last_sync = $stats['last_csv_sync'] ?? '';
+        $last_log  = $stats['last_stats'] ?? [];
+        ?>
+        <div class="wrap farmadati-wrap">
+            <h1><span class="dashicons dashicons-upload"></span> Farmadati – Sincronizzazione CSV</h1>
+
+            <?php if ( ! $stats['csv_exists'] ) : ?>
+                <div class="notice notice-error">
+                    <p><strong>File CSV non trovato.</strong> Il file deve essere depositato in:
+                    <code><?php echo esc_html( Farmadati_CSV_Sync::get_csv_path() ); ?></code></p>
+                </div>
+            <?php endif; ?>
+
+            <div class="farmadati-section">
+                <h2>Stato</h2>
+                <table class="form-table">
+                    <tr>
+                        <th>File CSV</th>
+                        <td>
+                            <?php if ( $stats['csv_exists'] ) : ?>
+                                <span style="color:#007017;">&#10004; Presente</span>
+                                &nbsp;–&nbsp;
+                                Modificato: <?php echo esc_html( date_i18n( 'd/m/Y H:i', $stats['csv_modified'] ) ); ?>
+                            <?php else : ?>
+                                <span style="color:#cc1818;">&#10008; Non trovato</span>
+                            <?php endif; ?>
+                        </td>
+                    </tr>
+                    <tr>
+                        <th>Ultima sync CSV</th>
+                        <td><?php echo $last_sync ? esc_html( $last_sync ) : 'Mai eseguita'; ?></td>
+                    </tr>
+                    <?php if ( ! empty( $last_log ) ) : ?>
+                    <tr>
+                        <th>Risultati ultima sync</th>
+                        <td>
+                            Nuovi: <strong><?php echo (int) ( $last_log['new'] ?? 0 ); ?></strong> &nbsp;|&nbsp;
+                            Aggiornati: <strong><?php echo (int) ( $last_log['updated'] ?? 0 ); ?></strong> &nbsp;|&nbsp;
+                            Errori: <strong><?php echo (int) ( $last_log['errors'] ?? 0 ); ?></strong>
+                            (su <?php echo (int) ( $last_log['total'] ?? 0 ); ?> totali)
+                        </td>
+                    </tr>
+                    <?php endif; ?>
+                    <tr>
+                        <th>Prodotti WooCommerce</th>
+                        <td>
+                            Sincronizzati da CSV: <strong><?php echo (int) $stats['synced']; ?></strong> &nbsp;|&nbsp;
+                            Arricchiti da Farmadati: <strong><?php echo (int) $stats['enriched']; ?></strong>
+                        </td>
+                    </tr>
+                </table>
+            </div>
+
+            <div class="farmadati-section">
+                <h2>Stadio 1 – Importa / Aggiorna da CSV</h2>
+                <p>Legge <code><?php echo esc_html( Farmadati_CSV_Sync::CSV_SUBPATH ); ?></code> e crea/aggiorna
+                   i prodotti WooCommerce con prezzi, stock e categorie del gestionale.<br>
+                   <em>Veloce: non effettua chiamate a Farmadati. Sicuro da eseguire anche con molti prodotti.</em></p>
+                <p>
+                    <button class="button button-primary" id="fd-csv-sync-btn"
+                        <?php disabled( ! $stats['csv_exists'] ); ?>>
+                        Avvia sync CSV
+                    </button>
+                    <span id="fd-csv-sync-spinner" class="spinner" style="float:none;vertical-align:middle;"></span>
+                </p>
+                <div id="fd-csv-sync-result" style="margin-top:12px;"></div>
+            </div>
+
+            <div class="farmadati-section">
+                <h2>Stadio 2 – Arricchimento da Farmadati</h2>
+                <p>Per i prodotti sincronizzati ma non ancora arricchiti, recupera da Farmadati:
+                   nome ufficiale, descrizione e immagine di prodotto.<br>
+                   <em>Lento (una chiamata SOAP per prodotto). L'avanzamento è mostrato in tempo reale.</em></p>
+                <p>
+                    <button class="button button-primary" id="fd-enrich-btn">Avvia arricchimento</button>
+                    <button class="button" id="fd-enrich-stop-btn" style="display:none;">Ferma</button>
+                    <span id="fd-enrich-spinner" class="spinner" style="float:none;vertical-align:middle;"></span>
+                </p>
+                <div id="fd-enrich-progress" style="margin-top:12px;display:none;">
+                    <div style="background:#e0e0e0;border-radius:4px;height:20px;overflow:hidden;">
+                        <div id="fd-enrich-bar" style="background:#2271b1;height:100%;width:0;transition:width .3s;"></div>
+                    </div>
+                    <p id="fd-enrich-status" style="margin-top:6px;"></p>
+                </div>
+                <div id="fd-enrich-result" style="margin-top:12px;"></div>
+            </div>
+        </div>
+        <?php
+    }
+
+    public static function ajax_csv_sync() {
+        check_ajax_referer( 'farmadati_nonce', 'nonce' );
+
+        if ( ! current_user_can( 'manage_woocommerce' ) ) {
+            wp_send_json_error( 'Permessi insufficienti.' );
+        }
+
+        set_time_limit( 300 );
+        if ( function_exists( 'wp_raise_memory_limit' ) ) {
+            wp_raise_memory_limit( 'admin' );
+        }
+
+        $result = Farmadati_CSV_Sync::sync_all_from_csv();
+
+        if ( is_wp_error( $result ) ) {
+            wp_send_json_error( $result->get_error_message() );
+        }
+
+        wp_send_json_success( $result );
+    }
+
+    public static function ajax_csv_enrich() {
+        check_ajax_referer( 'farmadati_nonce', 'nonce' );
+
+        if ( ! current_user_can( 'manage_woocommerce' ) ) {
+            wp_send_json_error( 'Permessi insufficienti.' );
+        }
+
+        set_time_limit( 120 );
+
+        $offset = max( 0, (int) ( $_POST['offset'] ?? 0 ) );
+        $result = Farmadati_CSV_Sync::enrich_batch( $offset );
 
         if ( is_wp_error( $result ) ) {
             wp_send_json_error( $result->get_error_message() );

@@ -294,4 +294,146 @@
         });
     });
 
+
+    // -------------------------------------------------------------------------
+    // CSV Sync – Stadio 1
+    // -------------------------------------------------------------------------
+    $(document).on('click', '#fd-csv-sync-btn', function () {
+        var $btn     = $(this);
+        var $spinner = $('#fd-csv-sync-spinner');
+        var $result  = $('#fd-csv-sync-result');
+
+        $btn.prop('disabled', true).text('Sincronizzazione…');
+        $spinner.addClass('is-active');
+        $result.html('<p>Lettura CSV e aggiornamento prodotti in corso…</p>');
+
+        $.post(farmadatiAjax.ajaxurl, {
+            action: 'farmadati_csv_sync',
+            nonce:  farmadatiAjax.nonce
+        })
+        .done(function (res) {
+            if (res.success) {
+                var d = res.data;
+                $result.html(
+                    '<div class="notice notice-success" style="margin:0;"><p>' +
+                    '<strong>Sync completata!</strong> ' +
+                    'Nuovi: <strong>' + (d.new || 0) + '</strong> &nbsp;| ' +
+                    'Aggiornati: <strong>' + (d.updated || 0) + '</strong> &nbsp;| ' +
+                    'Errori: <strong>' + (d.errors || 0) + '</strong> ' +
+                    '(su ' + (d.total || 0) + ' totali)' +
+                    '</p></div>'
+                );
+            } else {
+                $result.html('<div class="notice notice-error" style="margin:0;"><p>' + escHtml(res.data) + '</p></div>');
+            }
+        })
+        .fail(function () {
+            $result.html('<div class="notice notice-error" style="margin:0;"><p>Errore di comunicazione con il server.</p></div>');
+        })
+        .always(function () {
+            $btn.prop('disabled', false).text('Avvia sync CSV');
+            $spinner.removeClass('is-active');
+        });
+    });
+
+    // -------------------------------------------------------------------------
+    // CSV Enrich – Stadio 2 (batch AJAX)
+    // -------------------------------------------------------------------------
+    var enrichRunning  = false;
+    var enrichOffset   = 0;
+    var enrichTotal    = 0;
+    var enrichDone     = 0;
+
+    function runEnrichBatch() {
+        if (!enrichRunning) { return; }
+
+        $.post(farmadatiAjax.ajaxurl, {
+            action: 'farmadati_csv_enrich',
+            nonce:  farmadatiAjax.nonce,
+            offset: enrichOffset
+        })
+        .done(function (res) {
+            if (!enrichRunning) { return; }
+
+            if (!res.success) {
+                stopEnrich();
+                $('#fd-enrich-result').html(
+                    '<div class="notice notice-error" style="margin:0;"><p>' + escHtml(res.data) + '</p></div>'
+                );
+                return;
+            }
+
+            var d = res.data;
+            enrichDone   += (d.enriched || 0) + (d.errors || 0);
+            enrichOffset += 5;   // batch size
+
+            var remaining = parseInt(d.remaining, 10) || 0;
+            var processed = enrichDone;
+            if (enrichTotal === 0 && remaining > 0) {
+                enrichTotal = processed + remaining;
+            }
+
+            var pct = enrichTotal > 0
+                ? Math.min(100, Math.round(processed / enrichTotal * 100))
+                : (remaining === 0 ? 100 : 0);
+
+            $('#fd-enrich-bar').css('width', pct + '%');
+            $('#fd-enrich-status').text(
+                'Arricchiti: ' + enrichDone +
+                (enrichTotal > 0 ? ' / ' + enrichTotal : '') +
+                '  —  Rimanenti: ' + remaining
+            );
+
+            if (remaining === 0) {
+                stopEnrich();
+                $('#fd-enrich-result').html(
+                    '<div class="notice notice-success" style="margin:0;"><p>' +
+                    '<strong>Arricchimento completato!</strong> ' +
+                    'Prodotti aggiornati con dati Farmadati: <strong>' + enrichDone + '</strong>' +
+                    '</p></div>'
+                );
+            } else {
+                setTimeout(runEnrichBatch, 200);
+            }
+        })
+        .fail(function () {
+            stopEnrich();
+            $('#fd-enrich-result').html(
+                '<div class="notice notice-error" style="margin:0;"><p>Errore di comunicazione con il server.</p></div>'
+            );
+        });
+    }
+
+    function stopEnrich() {
+        enrichRunning = false;
+        $('#fd-enrich-btn').prop('disabled', false).show();
+        $('#fd-enrich-stop-btn').hide();
+        $('#fd-enrich-spinner').removeClass('is-active');
+    }
+
+    $(document).on('click', '#fd-enrich-btn', function () {
+        enrichRunning = true;
+        enrichOffset  = 0;
+        enrichTotal   = 0;
+        enrichDone    = 0;
+
+        $(this).prop('disabled', true).hide();
+        $('#fd-enrich-stop-btn').show();
+        $('#fd-enrich-spinner').addClass('is-active');
+        $('#fd-enrich-progress').show();
+        $('#fd-enrich-result').html('');
+        $('#fd-enrich-bar').css('width', '0%');
+        $('#fd-enrich-status').text('Avvio…');
+
+        runEnrichBatch();
+    });
+
+    $(document).on('click', '#fd-enrich-stop-btn', function () {
+        enrichRunning = false;
+        stopEnrich();
+        $('#fd-enrich-result').html(
+            '<div class="notice notice-warning" style="margin:0;"><p>Arricchimento interrotto. Puoi riprendere avviando di nuovo.</p></div>'
+        );
+    });
+
 }(jQuery));

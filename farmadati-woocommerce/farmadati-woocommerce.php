@@ -30,10 +30,12 @@ function farmadati_wc_init() {
 
     require_once FARMADATI_WC_PLUGIN_DIR . 'includes/class-farmadati-client.php';
     require_once FARMADATI_WC_PLUGIN_DIR . 'includes/class-farmadati-sync.php';
+    require_once FARMADATI_WC_PLUGIN_DIR . 'includes/class-farmadati-csv-sync.php';
     require_once FARMADATI_WC_PLUGIN_DIR . 'includes/class-farmadati-admin.php';
 
     Farmadati_Admin::init();
     Farmadati_Sync::init();
+    Farmadati_CSV_Sync::init();
 }
 
 register_activation_hook( __FILE__, 'farmadati_wc_activate' );
