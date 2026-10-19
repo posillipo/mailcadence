@@ -449,13 +449,18 @@ class Farmadati_Admin {
         }
 
         $table   = sanitize_text_field( $_POST['table'] ?? 'TE001' );
-        $raw     = $_POST['record'] ?? [];
+        $raw_json = wp_unslash( $_POST['record'] ?? '{}' );
+        $raw      = json_decode( $raw_json, true );
+
+        if ( ! is_array( $raw ) ) {
+            wp_send_json_error( 'Dati del record non validi.' );
+        }
 
         // Sanifica i campi del record
         $record = [];
         foreach ( $raw as $k => $v ) {
-            $key = sanitize_key( $k );
-            $record[ $key ] = sanitize_text_field( $v );
+            $key            = sanitize_text_field( $k );
+            $record[ $key ] = sanitize_text_field( (string) $v );
         }
 
         $product_id = Farmadati_Sync::import_product( $record, $table );
@@ -466,8 +471,8 @@ class Farmadati_Admin {
 
         wp_send_json_success( [
             'product_id' => $product_id,
-            'edit_link'  => get_edit_post_link( $product_id, 'url' ),
-            'view_link'  => get_permalink( $product_id ),
+            'edit_url'   => get_edit_post_link( $product_id, 'url' ),
+            'view_url'   => get_permalink( $product_id ),
         ] );
     }
 
