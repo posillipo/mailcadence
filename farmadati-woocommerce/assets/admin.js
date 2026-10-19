@@ -148,9 +148,24 @@
         });
     }
 
+    var schemaFields = [];
+
+    function pickCodeField(fields) {
+        // Preferisce il campo il cui key o descrizione contiene "cod"
+        var preferred = null;
+        $.each(fields, function (i, f) {
+            var haystack = (f.key + ' ' + f.description).toLowerCase();
+            if (!preferred && haystack.indexOf('cod') !== -1) {
+                preferred = f;
+                return false;
+            }
+        });
+        return preferred || fields[0] || null;
+    }
+
     function loadSchema(table) {
-        var $select = $('#fd-search-type');
-        $select.prop('disabled', true).html('<option>Caricamento…</option>');
+        $('#fd-field-hint').text('Caricamento campi…');
+        $('#fd-search-btn').prop('disabled', true);
 
         $.post(farmadatiAjax.ajaxurl, {
             action: 'farmadati_get_schema',
@@ -158,15 +173,27 @@
             table:  table
         })
         .done(function (res) {
-            if (!res.success) { return; }
+            if (!res.success || !res.data.length) {
+                $('#fd-field-hint').text('Schema non disponibile.');
+                return;
+            }
+            schemaFields = res.data;
+            var code = pickCodeField(res.data);
             var opts = '';
             $.each(res.data, function (i, f) {
-                opts += '<option value="' + escHtml(f.key) + '">' + escHtml(f.key + ' – ' + f.description) + '</option>';
+                var sel = (code && f.key === code.key) ? ' selected' : '';
+                opts += '<option value="' + escHtml(f.key) + '"' + sel + '>' + escHtml(f.key + ' – ' + f.description) + '</option>';
             });
-            $select.html(opts).prop('disabled', false);
+            $('#fd-search-type').html(opts);
+            if (code) {
+                $('#fd-field-hint').text('Campo: ' + code.key + ' – ' + code.description);
+            }
         })
         .fail(function () {
-            $select.html('<option value="FDI_0004">Nome prodotto</option>').prop('disabled', false);
+            $('#fd-field-hint').text('Impossibile caricare lo schema.');
+        })
+        .always(function () {
+            $('#fd-search-btn').prop('disabled', false);
         });
     }
 

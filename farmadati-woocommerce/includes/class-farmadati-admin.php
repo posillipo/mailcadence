@@ -264,19 +264,11 @@ class Farmadati_Admin {
                         </td>
                     </tr>
                     <tr>
-                        <th><label for="fd-search-type">Cerca per</label></th>
+                        <th><label for="fd-search-query">Codice prodotto</label></th>
                         <td>
-                            <select id="fd-search-type">
-                                <option value="FDI_0004">Nome prodotto</option>
-                                <option value="FDI_0001">Codice PARAF/AIC</option>
-                                <option value="FDI_0002">Codice EAN</option>
-                            </select>
-                        </td>
-                    </tr>
-                    <tr>
-                        <th><label for="fd-search-query">Termine di ricerca</label></th>
-                        <td>
-                            <input type="text" id="fd-search-query" class="regular-text" placeholder="Es: ibuprofene" />
+                            <input type="text" id="fd-search-query" class="regular-text" placeholder="Es: 012345678" />
+                            <select id="fd-search-type" style="display:none;"></select>
+                            <p class="description" id="fd-field-hint" style="margin-top:4px;"></p>
                         </td>
                     </tr>
                     <tr>
