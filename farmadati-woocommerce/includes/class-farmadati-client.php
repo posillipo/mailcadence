@@ -29,20 +29,67 @@ class Farmadati_Client {
             'connection_timeout' => 30,
             'default_socket_timeout' => 120,
             'features'           => SOAP_SINGLE_ELEMENT_ARRAYS,
-            'cache_wsdl'         => WSDL_CACHE_DISK,
+            'cache_wsdl'         => WSDL_CACHE_NONE,
         ];
+    }
+
+    /**
+     * Scarica il WSDL tramite wp_remote_get() e lo salva in un file temporaneo.
+     * Restituisce il percorso locale o WP_Error.
+     */
+    private function fetch_wsdl( $wsdl_url, $cache_key ) {
+        $upload_dir = wp_upload_dir();
+        $cache_file = trailingslashit( $upload_dir['basedir'] ) . 'farmadati-wsdl-' . $cache_key . '.xml';
+
+        // Usa la cache se il file esiste ed è recente (meno di 24 ore)
+        if ( file_exists( $cache_file ) && ( time() - filemtime( $cache_file ) ) < DAY_IN_SECONDS ) {
+            return $cache_file;
+        }
+
+        $response = wp_remote_get( $wsdl_url, [
+            'timeout'   => 30,
+            'sslverify' => true,
+        ] );
+
+        if ( is_wp_error( $response ) ) {
+            // Prova senza verifica SSL in caso di problemi di certificato
+            $response = wp_remote_get( $wsdl_url, [
+                'timeout'   => 30,
+                'sslverify' => false,
+            ] );
+        }
+
+        if ( is_wp_error( $response ) ) {
+            return $response;
+        }
+
+        $body = wp_remote_retrieve_body( $response );
+        if ( empty( $body ) ) {
+            return new WP_Error( 'empty_wsdl', 'WSDL vuoto o non raggiungibile: ' . $wsdl_url );
+        }
+
+        file_put_contents( $cache_file, $body );
+        return $cache_file;
     }
 
     private function client_m1() {
         if ( $this->client_m1 === null ) {
-            $this->client_m1 = new SoapClient( self::WSDL_M1, $this->get_soap_options() );
+            $wsdl = $this->fetch_wsdl( self::WSDL_M1, 'm1' );
+            if ( is_wp_error( $wsdl ) ) {
+                throw new Exception( $wsdl->get_error_message() );
+            }
+            $this->client_m1 = new SoapClient( $wsdl, $this->get_soap_options() );
         }
         return $this->client_m1;
     }
 
     private function client_m2() {
         if ( $this->client_m2 === null ) {
-            $this->client_m2 = new SoapClient( self::WSDL_M2, $this->get_soap_options() );
+            $wsdl = $this->fetch_wsdl( self::WSDL_M2, 'm2' );
+            if ( is_wp_error( $wsdl ) ) {
+                throw new Exception( $wsdl->get_error_message() );
+            }
+            $this->client_m2 = new SoapClient( $wsdl, $this->get_soap_options() );
         }
         return $this->client_m2;
     }
