@@ -17,6 +17,7 @@ class Farmadati_Admin {
         add_action( 'wp_ajax_farmadati_run_sync', [ __CLASS__, 'ajax_run_sync' ] );
         add_action( 'wp_ajax_farmadati_csv_sync', [ __CLASS__, 'ajax_csv_sync' ] );
         add_action( 'wp_ajax_farmadati_csv_enrich', [ __CLASS__, 'ajax_csv_enrich' ] );
+        add_action( 'admin_post_farmadati_upload_csv', [ __CLASS__, 'handle_csv_upload' ] );
     }
 
     public static function add_menu() {
@@ -567,16 +568,37 @@ class Farmadati_Admin {
         <div class="wrap farmadati-wrap">
             <h1><span class="dashicons dashicons-upload"></span> Farmadati – Sincronizzazione CSV</h1>
 
-            <div class="notice notice-info" style="margin-bottom:16px;">
-                <p>Percorso atteso per il file CSV:<br>
-                <code><?php echo esc_html( Farmadati_CSV_Sync::get_csv_path() ); ?></code></p>
-            </div>
+            <?php
+            // Messaggio dopo upload
+            $upload_msg = get_transient( 'farmadati_csv_upload_msg' );
+            if ( $upload_msg ) {
+                delete_transient( 'farmadati_csv_upload_msg' );
+                $type = $upload_msg['type'];
+                echo '<div class="notice notice-' . esc_attr( $type ) . ' is-dismissible"><p>' . esc_html( $upload_msg['text'] ) . '</p></div>';
+            }
+            ?>
 
-            <?php if ( ! $stats['csv_exists'] ) : ?>
-                <div class="notice notice-error">
-                    <p><strong>File CSV non trovato.</strong> Carica il file nel percorso indicato sopra.</p>
-                </div>
-            <?php endif; ?>
+            <div class="farmadati-section">
+                <h2>Carica file CSV</h2>
+                <p>Carica manualmente il file CSV esportato dal gestionale.<br>
+                   Il file verrà salvato in: <code><?php echo esc_html( Farmadati_CSV_Sync::get_csv_path() ); ?></code></p>
+                <form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>"
+                      enctype="multipart/form-data">
+                    <input type="hidden" name="action" value="farmadati_upload_csv" />
+                    <?php wp_nonce_field( 'farmadati_upload_csv', 'farmadati_upload_nonce' ); ?>
+                    <table class="form-table" style="max-width:600px;">
+                        <tr>
+                            <th><label for="farmadati_csv_file">File CSV</label></th>
+                            <td>
+                                <input type="file" name="farmadati_csv_file" id="farmadati_csv_file"
+                                       accept=".csv,text/csv" required />
+                                <p class="description">Il file deve avere il separatore <code>;</code> e i decimali con la virgola.</p>
+                            </td>
+                        </tr>
+                    </table>
+                    <?php submit_button( 'Carica CSV', 'secondary', 'submit', false ); ?>
+                </form>
+            </div>
 
             <div class="farmadati-section">
                 <h2>Stato</h2>
@@ -693,5 +715,73 @@ class Farmadati_Admin {
         }
 
         wp_send_json_success( $result );
+    }
+
+    public static function handle_csv_upload() {
+        if ( ! current_user_can( 'manage_woocommerce' ) ) {
+            wp_die( 'Permessi insufficienti.' );
+        }
+
+        check_admin_referer( 'farmadati_upload_csv', 'farmadati_upload_nonce' );
+
+        $redirect = admin_url( 'admin.php?page=farmadati-wc-csv' );
+
+        if ( empty( $_FILES['farmadati_csv_file']['tmp_name'] ) ) {
+            set_transient( 'farmadati_csv_upload_msg', [
+                'type' => 'error',
+                'text' => 'Nessun file ricevuto.',
+            ], 60 );
+            wp_redirect( $redirect );
+            exit;
+        }
+
+        $file     = $_FILES['farmadati_csv_file'];
+        $tmp      = $file['tmp_name'];
+        $original = sanitize_file_name( $file['name'] );
+
+        // Verifica estensione
+        $ext = strtolower( pathinfo( $original, PATHINFO_EXTENSION ) );
+        if ( $ext !== 'csv' ) {
+            set_transient( 'farmadati_csv_upload_msg', [
+                'type' => 'error',
+                'text' => 'Il file deve avere estensione .csv.',
+            ], 60 );
+            wp_redirect( $redirect );
+            exit;
+        }
+
+        // Verifica che sia testo (MIME check di base)
+        $mime = mime_content_type( $tmp );
+        if ( $mime && strpos( $mime, 'text/' ) === false && $mime !== 'application/octet-stream' ) {
+            set_transient( 'farmadati_csv_upload_msg', [
+                'type' => 'error',
+                'text' => 'Il file non sembra un CSV valido (tipo: ' . $mime . ').',
+            ], 60 );
+            wp_redirect( $redirect );
+            exit;
+        }
+
+        $dest = Farmadati_CSV_Sync::get_csv_path();
+
+        // Assicura che la cartella esista
+        farmadati_wc_ensure_scambiodati_dir();
+
+        if ( ! move_uploaded_file( $tmp, $dest ) ) {
+            set_transient( 'farmadati_csv_upload_msg', [
+                'type' => 'error',
+                'text' => 'Impossibile salvare il file. Controlla i permessi della cartella scambiodati/.',
+            ], 60 );
+            wp_redirect( $redirect );
+            exit;
+        }
+
+        $rows = max( 0, count( file( $dest ) ) - 1 );
+        set_transient( 'farmadati_csv_upload_msg', [
+            'type' => 'success',
+            'text' => "File CSV caricato correttamente ($rows prodotti).",
+        ], 60 );
+
+        wp_redirect( $redirect );
+        exit;
     }
 }
