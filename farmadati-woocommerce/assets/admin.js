@@ -148,6 +148,38 @@
         });
     }
 
+    function loadSchema(table) {
+        var $select = $('#fd-search-type');
+        $select.prop('disabled', true).html('<option>Caricamento…</option>');
+
+        $.post(farmadatiAjax.ajaxurl, {
+            action: 'farmadati_get_schema',
+            nonce:  farmadatiAjax.nonce,
+            table:  table
+        })
+        .done(function (res) {
+            if (!res.success) { return; }
+            var opts = '';
+            $.each(res.data, function (i, f) {
+                opts += '<option value="' + escHtml(f.key) + '">' + escHtml(f.key + ' – ' + f.description) + '</option>';
+            });
+            $select.html(opts).prop('disabled', false);
+        })
+        .fail(function () {
+            $select.html('<option value="FDI_0004">Nome prodotto</option>').prop('disabled', false);
+        });
+    }
+
+    // Carica schema alla selezione di una tabella
+    $(document).on('change', '#fd-table', function () {
+        loadSchema($(this).val());
+    });
+
+    // Carica schema per la tabella default al caricamento della pagina
+    if ($('#fd-table').length) {
+        loadSchema($('#fd-table').val());
+    }
+
     $(document).on('click', '#fd-search-btn', function () {
         doSearch(1);
     });

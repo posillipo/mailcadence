@@ -413,6 +413,43 @@ class Farmadati_Client {
     }
 
     /**
+     * Restituisce la struttura (campi) di una tabella (Method 1 - GetSchemaDataSet).
+     *
+     * @param string $table  Codice tabella (es. "TE001")
+     * @return array|WP_Error  Array di ['key'=>..., 'description'=>..., 'type'=>...]
+     */
+    public function get_schema( $table ) {
+        try {
+            $result = $this->client_m1()->GetSchemaDataSet( [
+                'Username'      => $this->username,
+                'Password'      => $this->password,
+                'CodiceSetDati' => $table,
+            ] );
+
+            $out = $result->GetSchemaDataSetResult ?? $result;
+            if ( ( $out->CodEsito ?? '' ) !== 'OK' ) {
+                return new WP_Error( 'farmadati_error', $out->DescEsito ?? 'Errore schema' );
+            }
+
+            $fields = [];
+            $raw = $out->Fields->Field ?? [];
+            if ( ! is_array( $raw ) ) {
+                $raw = [ $raw ];
+            }
+            foreach ( $raw as $f ) {
+                $fields[] = [
+                    'key'         => $f->Key ?? '',
+                    'description' => $f->Description ?? $f->Key ?? '',
+                    'type'        => $f->Type ?? '',
+                ];
+            }
+            return $fields;
+        } catch ( Exception $e ) {
+            return new WP_Error( 'farmadati_soap', $e->getMessage() );
+        }
+    }
+
+    /**
      * Verifica le credenziali tentando GetEnabledDataSet (Method 2).
      *
      * @return true|WP_Error

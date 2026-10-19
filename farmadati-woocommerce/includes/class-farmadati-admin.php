@@ -12,6 +12,7 @@ class Farmadati_Admin {
         // AJAX handlers
         add_action( 'wp_ajax_farmadati_test_connection', [ __CLASS__, 'ajax_test_connection' ] );
         add_action( 'wp_ajax_farmadati_search', [ __CLASS__, 'ajax_search' ] );
+        add_action( 'wp_ajax_farmadati_get_schema', [ __CLASS__, 'ajax_get_schema' ] );
         add_action( 'wp_ajax_farmadati_import_product', [ __CLASS__, 'ajax_import_product' ] );
         add_action( 'wp_ajax_farmadati_run_sync', [ __CLASS__, 'ajax_run_sync' ] );
     }
@@ -414,6 +415,25 @@ class Farmadati_Admin {
         wp_send_json_success( 'Connessione riuscita! Credenziali valide.' );
     }
 
+    public static function ajax_get_schema() {
+        check_ajax_referer( 'farmadati_nonce', 'nonce' );
+
+        if ( ! current_user_can( 'manage_woocommerce' ) ) {
+            wp_send_json_error( 'Permessi insufficienti.' );
+        }
+
+        $table   = sanitize_text_field( $_POST['table'] ?? '' );
+        $options = get_option( 'farmadati_wc_options', [] );
+        $client  = new Farmadati_Client( $options['username'] ?? '', $options['password'] ?? '' );
+        $result  = $client->get_schema( $table );
+
+        if ( is_wp_error( $result ) ) {
+            wp_send_json_error( $result->get_error_message() );
+        }
+
+        wp_send_json_success( $result );
+    }
+
     public static function ajax_search() {
         check_ajax_referer( 'farmadati_nonce', 'nonce' );
 
@@ -451,21 +471,6 @@ class Farmadati_Admin {
             $page,
             20
         );
-
-        // Se il campo non esiste nella tabella, riprova con FDI_0004 (nome prodotto)
-        if ( is_wp_error( $result ) && $field_key !== 'FDI_0004' ) {
-            $msg = $result->get_error_message();
-            if ( strpos( $msg, 'nome di colonna' ) !== false || strpos( $msg, 'EXITPOINT' ) !== false ) {
-                $result = $client->execute_query(
-                    $table,
-                    [ 'ALL' ],
-                    [ [ 'key' => 'FDI_0004', 'operator' => 'CONTIENE', 'value' => $query, 'or_group' => 0 ] ],
-                    [],
-                    $page,
-                    20
-                );
-            }
-        }
 
         if ( is_wp_error( $result ) ) {
             wp_send_json_error( $result->get_error_message() );
