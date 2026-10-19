@@ -149,7 +149,7 @@ class Farmadati_Client {
                 ];
             }
             return $tables;
-        } catch ( SoapFault $e ) {
+        } catch ( Exception $e ) {
             return new WP_Error( 'farmadati_soap', $e->getMessage() );
         }
     }
@@ -215,7 +215,7 @@ class Farmadati_Client {
             $pages   = $per_pg > 0 ? (int) ceil( $total / $per_pg ) : 1;
 
             return [ 'records' => $records, 'total' => $total, 'pages' => $pages ];
-        } catch ( SoapFault $e ) {
+        } catch ( Exception $e ) {
             return new WP_Error( 'farmadati_soap', $e->getMessage() );
         }
     }
@@ -260,7 +260,7 @@ class Farmadati_Client {
             }
 
             return (int) ( $out->NumRecords ?? 0 );
-        } catch ( SoapFault $e ) {
+        } catch ( Exception $e ) {
             return new WP_Error( 'farmadati_soap', $e->getMessage() );
         }
     }
@@ -341,7 +341,7 @@ class Farmadati_Client {
             }
 
             return $all_records;
-        } catch ( SoapFault $e ) {
+        } catch ( Exception $e ) {
             return new WP_Error( 'farmadati_soap', $e->getMessage() );
         }
     }
@@ -400,7 +400,7 @@ class Farmadati_Client {
             }
 
             return $all_records;
-        } catch ( SoapFault $e ) {
+        } catch ( Exception $e ) {
             return new WP_Error( 'farmadati_soap', $e->getMessage() );
         }
     }
@@ -412,7 +412,7 @@ class Farmadati_Client {
      */
     public function test_connection() {
         try {
-            $result = $this->client_m2()->GetEnabledDataSet( [
+            $result = $this->client_m1()->GetEnabledDataSet( [
                 'Username' => $this->username,
                 'Password' => $this->password,
             ] );
@@ -421,7 +421,7 @@ class Farmadati_Client {
                 return new WP_Error( 'farmadati_auth', $out->DescEsito ?? 'Credenziali non valide' );
             }
             return true;
-        } catch ( SoapFault $e ) {
+        } catch ( Exception $e ) {
             return new WP_Error( 'farmadati_soap', $e->getMessage() );
         }
     }
