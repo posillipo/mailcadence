@@ -339,18 +339,17 @@
     // -------------------------------------------------------------------------
     // CSV Enrich – Stadio 2 (batch AJAX)
     // -------------------------------------------------------------------------
-    var enrichRunning  = false;
-    var enrichOffset   = 0;
-    var enrichTotal    = 0;
-    var enrichDone     = 0;
+    var enrichRunning   = false;
+    var enrichTotal     = 0;
+    var enrichDone      = 0;
+    var enrichEmptyRuns = 0;   // guard contro loop infiniti
 
     function runEnrichBatch() {
         if (!enrichRunning) { return; }
 
         $.post(farmadatiAjax.ajaxurl, {
             action: 'farmadati_csv_enrich',
-            nonce:  farmadatiAjax.nonce,
-            offset: enrichOffset
+            nonce:  farmadatiAjax.nonce
         })
         .done(function (res) {
             if (!enrichRunning) { return; }
@@ -363,24 +362,39 @@
                 return;
             }
 
-            var d = res.data;
-            enrichDone   += (d.enriched || 0) + (d.errors || 0);
-            enrichOffset += 5;   // batch size
+            var d         = res.data;
+            var batchDone = (d.enriched || 0) + (d.errors || 0);
+            enrichDone   += batchDone;
 
-            var remaining = parseInt(d.remaining, 10) || 0;
-            var processed = enrichDone;
-            if (enrichTotal === 0 && remaining > 0) {
-                enrichTotal = processed + remaining;
+            // Mostra errori del batch in un log espandibile
+            if (d.log && d.log.length) {
+                var $log = $('#fd-enrich-log');
+                if (!$log.length) {
+                    $('#fd-enrich-progress').after(
+                        '<details id="fd-enrich-log-wrap" style="margin-top:8px;">' +
+                        '<summary style="cursor:pointer;color:#50575e;">Log errori</summary>' +
+                        '<ul id="fd-enrich-log" style="font-size:12px;max-height:150px;overflow-y:auto;margin:4px 0;"></ul>' +
+                        '</details>'
+                    );
+                    $log = $('#fd-enrich-log');
+                }
+                $.each(d.log, function (i, msg) {
+                    $log.append('<li>' + escHtml(msg) + '</li>');
+                });
             }
 
+            var remaining = parseInt(d.remaining, 10) || 0;
+
+            // Ricalcola il totale ad ogni batch (remaining + processati finora)
+            enrichTotal = enrichDone + remaining;
+
             var pct = enrichTotal > 0
-                ? Math.min(100, Math.round(processed / enrichTotal * 100))
-                : (remaining === 0 ? 100 : 0);
+                ? Math.min(100, Math.round(enrichDone / enrichTotal * 100))
+                : 100;
 
             $('#fd-enrich-bar').css('width', pct + '%');
             $('#fd-enrich-status').text(
-                'Arricchiti: ' + enrichDone +
-                (enrichTotal > 0 ? ' / ' + enrichTotal : '') +
+                'Arricchiti: ' + enrichDone + ' / ' + enrichTotal +
                 '  —  Rimanenti: ' + remaining
             );
 
@@ -389,12 +403,30 @@
                 $('#fd-enrich-result').html(
                     '<div class="notice notice-success" style="margin:0;"><p>' +
                     '<strong>Arricchimento completato!</strong> ' +
-                    'Prodotti aggiornati con dati Farmadati: <strong>' + enrichDone + '</strong>' +
+                    'Prodotti aggiornati: <strong>' + enrichDone + '</strong>' +
                     '</p></div>'
                 );
-            } else {
-                setTimeout(runEnrichBatch, 200);
+                return;
             }
+
+            // Guard: se 3 batch consecutivi non processano nulla → fermati
+            if (batchDone === 0) {
+                enrichEmptyRuns++;
+                if (enrichEmptyRuns >= 3) {
+                    stopEnrich();
+                    $('#fd-enrich-result').html(
+                        '<div class="notice notice-warning" style="margin:0;"><p>' +
+                        'Arricchimento interrotto: nessun prodotto processato negli ultimi batch. ' +
+                        'Rimanenti: ' + remaining + '. Riprova più tardi.' +
+                        '</p></div>'
+                    );
+                    return;
+                }
+            } else {
+                enrichEmptyRuns = 0;
+            }
+
+            setTimeout(runEnrichBatch, 300);
         })
         .fail(function () {
             stopEnrich();
@@ -412,10 +444,10 @@
     }
 
     $(document).on('click', '#fd-enrich-btn', function () {
-        enrichRunning = true;
-        enrichOffset  = 0;
-        enrichTotal   = 0;
-        enrichDone    = 0;
+        enrichRunning   = true;
+        enrichTotal     = 0;
+        enrichDone      = 0;
+        enrichEmptyRuns = 0;
 
         $(this).prop('disabled', true).hide();
         $('#fd-enrich-stop-btn').show();

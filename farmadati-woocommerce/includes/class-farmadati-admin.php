@@ -707,8 +707,7 @@ class Farmadati_Admin {
 
         set_time_limit( 120 );
 
-        $offset = max( 0, (int) ( $_POST['offset'] ?? 0 ) );
-        $result = Farmadati_CSV_Sync::enrich_batch( $offset );
+        $result = Farmadati_CSV_Sync::enrich_batch();
 
         if ( is_wp_error( $result ) ) {
             wp_send_json_error( $result->get_error_message() );

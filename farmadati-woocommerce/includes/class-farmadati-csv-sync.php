@@ -451,12 +451,13 @@ class Farmadati_CSV_Sync {
 
     /**
      * Arricchisce un batch di prodotti non ancora processati.
+     * Offset non necessario: la meta_query esclude già i prodotti arricchiti,
+     * quindi la query restituisce sempre i primi N non ancora processati.
      *
-     * @param  int $offset
      * @param  int $limit   Max self::ENRICH_BATCH
      * @return array|WP_Error  ['enriched', 'errors', 'remaining']
      */
-    public static function enrich_batch( $offset = 0, $limit = self::ENRICH_BATCH ) {
+    public static function enrich_batch( $limit = self::ENRICH_BATCH ) {
         $options  = get_option( 'farmadati_wc_options', [] );
         $username = $options['username'] ?? '';
         $password = $options['password'] ?? '';
@@ -470,7 +471,6 @@ class Farmadati_CSV_Sync {
             'post_type'      => 'product',
             'post_status'    => [ 'publish', 'draft' ],
             'posts_per_page' => (int) min( $limit, self::ENRICH_BATCH ),
-            'offset'         => (int) $offset,
             'fields'         => 'ids',
             'meta_query'     => [
                 'relation' => 'AND',
@@ -491,7 +491,7 @@ class Farmadati_CSV_Sync {
 
         $q      = new WP_Query( $args );
         $client = new Farmadati_Client( $username, $password );
-        $stats  = [ 'enriched' => 0, 'errors' => 0 ];
+        $stats  = [ 'enriched' => 0, 'errors' => 0, 'log' => [] ];
 
         foreach ( $q->posts as $product_id ) {
             $product = wc_get_product( $product_id );
@@ -500,11 +500,17 @@ class Farmadati_CSV_Sync {
             if ( empty( $sku ) ) {
                 update_post_meta( $product_id, '_farmadati_enrich_error', 'SKU mancante.' );
                 $stats['errors']++;
+                $stats['log'][] = "ID $product_id: SKU mancante";
                 continue;
             }
 
             $res = self::enrich_product( $product_id, $sku, $client );
-            is_wp_error( $res ) ? $stats['errors']++ : $stats['enriched']++;
+            if ( is_wp_error( $res ) ) {
+                $stats['errors']++;
+                $stats['log'][] = "AIC $sku: " . $res->get_error_message();
+            } else {
+                $stats['enriched']++;
+            }
         }
 
         // Conta quanti restano
