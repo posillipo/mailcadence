@@ -1,0 +1,502 @@
+<?php
+/**
+ * Interfaccia amministrativa per il plugin Farmadati WooCommerce.
+ */
+class Farmadati_Admin {
+
+    public static function init() {
+        add_action( 'admin_menu', [ __CLASS__, 'add_menu' ] );
+        add_action( 'admin_init', [ __CLASS__, 'register_settings' ] );
+        add_action( 'admin_enqueue_scripts', [ __CLASS__, 'enqueue_scripts' ] );
+
+        // AJAX handlers
+        add_action( 'wp_ajax_farmadati_test_connection', [ __CLASS__, 'ajax_test_connection' ] );
+        add_action( 'wp_ajax_farmadati_search', [ __CLASS__, 'ajax_search' ] );
+        add_action( 'wp_ajax_farmadati_import_product', [ __CLASS__, 'ajax_import_product' ] );
+        add_action( 'wp_ajax_farmadati_run_sync', [ __CLASS__, 'ajax_run_sync' ] );
+    }
+
+    public static function add_menu() {
+        add_menu_page(
+            'Farmadati',
+            'Farmadati',
+            'manage_woocommerce',
+            'farmadati-wc',
+            [ __CLASS__, 'render_main_page' ],
+            'dashicons-pills',
+            58
+        );
+
+        add_submenu_page(
+            'farmadati-wc',
+            'Cerca Prodotti',
+            'Cerca Prodotti',
+            'manage_woocommerce',
+            'farmadati-wc',
+            [ __CLASS__, 'render_main_page' ]
+        );
+
+        add_submenu_page(
+            'farmadati-wc',
+            'Sincronizzazione',
+            'Sincronizzazione',
+            'manage_woocommerce',
+            'farmadati-wc-sync',
+            [ __CLASS__, 'render_sync_page' ]
+        );
+
+        add_submenu_page(
+            'farmadati-wc',
+            'Impostazioni',
+            'Impostazioni',
+            'manage_options',
+            'farmadati-wc-settings',
+            [ __CLASS__, 'render_settings_page' ]
+        );
+    }
+
+    public static function register_settings() {
+        register_setting( 'farmadati_wc_options_group', 'farmadati_wc_options', [
+            'sanitize_callback' => [ __CLASS__, 'sanitize_options' ],
+        ] );
+    }
+
+    public static function sanitize_options( $input ) {
+        return [
+            'username'     => sanitize_text_field( $input['username'] ?? '' ),
+            'password'     => sanitize_text_field( $input['password'] ?? '' ),
+            'default_table' => sanitize_text_field( $input['default_table'] ?? 'TE001' ),
+            'sync_tables'  => array_map( 'sanitize_text_field', (array) ( $input['sync_tables'] ?? [ 'TE001' ] ) ),
+            'auto_sync'    => (bool) ( $input['auto_sync'] ?? false ),
+        ];
+    }
+
+    public static function enqueue_scripts( $hook ) {
+        if ( strpos( $hook, 'farmadati' ) === false ) {
+            return;
+        }
+
+        wp_enqueue_script(
+            'farmadati-admin',
+            FARMADATI_WC_PLUGIN_URL . 'assets/admin.js',
+            [ 'jquery' ],
+            FARMADATI_WC_VERSION,
+            true
+        );
+
+        wp_localize_script( 'farmadati-admin', 'farmadatiAjax', [
+            'ajaxurl' => admin_url( 'admin-ajax.php' ),
+            'nonce'   => wp_create_nonce( 'farmadati_nonce' ),
+            'i18n'    => [
+                'testing'        => __( 'Test in corso…', 'farmadati-wc' ),
+                'testConnection' => __( 'Testa connessione', 'farmadati-wc' ),
+                'noResults'      => __( 'Nessun risultato trovato.', 'farmadati-wc' ),
+                'colCode'        => __( 'Codice', 'farmadati-wc' ),
+                'colName'        => __( 'Nome prodotto', 'farmadati-wc' ),
+                'colPrice'       => __( 'Prezzo', 'farmadati-wc' ),
+                'colStatus'      => __( 'Stato', 'farmadati-wc' ),
+                'colAction'      => __( 'Azioni', 'farmadati-wc' ),
+                'colTable'       => __( 'Tabella', 'farmadati-wc' ),
+                'colResult'      => __( 'Risultato', 'farmadati-wc' ),
+                'inCommerce'     => __( 'In commercio', 'farmadati-wc' ),
+                'outCommerce'    => __( 'Non in commercio', 'farmadati-wc' ),
+                'importProduct'  => __( 'Importa', 'farmadati-wc' ),
+                'update'         => __( 'Aggiorna', 'farmadati-wc' ),
+                'edit'           => __( 'Modifica', 'farmadati-wc' ),
+                'importing'      => __( 'Importazione…', 'farmadati-wc' ),
+                'imported'       => __( 'Importato ✓', 'farmadati-wc' ),
+                'runSync'        => __( 'Avvia sincronizzazione', 'farmadati-wc' ),
+                'syncing'        => __( 'Sincronizzazione…', 'farmadati-wc' ),
+                'syncRunning'    => __( 'Sincronizzazione in corso, attendere…', 'farmadati-wc' ),
+                'page'           => __( 'Pagina', 'farmadati-wc' ),
+                'prev'           => __( 'Prec', 'farmadati-wc' ),
+                'next'           => __( 'Succ', 'farmadati-wc' ),
+                'ajaxError'      => __( 'Errore di comunicazione con il server. Riprova.', 'farmadati-wc' ),
+            ],
+        ] );
+
+        wp_enqueue_style( 'farmadati-admin', FARMADATI_WC_PLUGIN_URL . 'assets/admin.css', [], FARMADATI_WC_VERSION );
+    }
+
+    // -------------------------------------------------------------------------
+    // Pagine admin
+    // -------------------------------------------------------------------------
+
+    public static function render_settings_page() {
+        $options = get_option( 'farmadati_wc_options', [] );
+        $tables_available = [
+            'TE001' => 'TE001 – Parafarmaci e Dispositivi Medici',
+            'TE002' => 'TE002 – Medicinali SOP/OTC (autorizzazione richiesta)',
+            'TE006' => 'TE006 – Omeopatici',
+            'TE011' => 'TE011 – Medicinali Veterinari',
+            'TE015' => 'TE015 – Medicinali Veterinari SOP',
+        ];
+        $sync_tables = $options['sync_tables'] ?? [ 'TE001' ];
+        ?>
+        <div class="wrap">
+            <h1>Farmadati – Impostazioni</h1>
+
+            <form method="post" action="options.php">
+                <?php settings_fields( 'farmadati_wc_options_group' ); ?>
+                <table class="form-table">
+                    <tr>
+                        <th scope="row"><label for="farmadati_username">Username Farmadati</label></th>
+                        <td>
+                            <input type="text" id="farmadati_username" name="farmadati_wc_options[username]"
+                                value="<?php echo esc_attr( $options['username'] ?? '' ); ?>" class="regular-text" autocomplete="username" />
+                            <p class="description">Username fornito da Farmadati Italia.</p>
+                        </td>
+                    </tr>
+                    <tr>
+                        <th scope="row"><label for="farmadati_password">Password Farmadati</label></th>
+                        <td>
+                            <input type="password" id="farmadati_password" name="farmadati_wc_options[password]"
+                                value="<?php echo esc_attr( $options['password'] ?? '' ); ?>" class="regular-text" autocomplete="current-password" />
+                            <p class="description">Password fornita da Farmadati Italia. È usata anche come access key per le immagini.</p>
+                        </td>
+                    </tr>
+                    <tr>
+                        <th scope="row"><label for="farmadati_default_table">Tabella predefinita</label></th>
+                        <td>
+                            <select id="farmadati_default_table" name="farmadati_wc_options[default_table]">
+                                <?php foreach ( $tables_available as $code => $desc ) : ?>
+                                    <option value="<?php echo esc_attr( $code ); ?>" <?php selected( $options['default_table'] ?? 'TE001', $code ); ?>>
+                                        <?php echo esc_html( $desc ); ?>
+                                    </option>
+                                <?php endforeach; ?>
+                            </select>
+                        </td>
+                    </tr>
+                    <tr>
+                        <th scope="row">Tabelle da sincronizzare</th>
+                        <td>
+                            <?php foreach ( $tables_available as $code => $desc ) : ?>
+                                <label style="display:block;margin-bottom:4px;">
+                                    <input type="checkbox" name="farmadati_wc_options[sync_tables][]"
+                                        value="<?php echo esc_attr( $code ); ?>"
+                                        <?php checked( in_array( $code, $sync_tables, true ) ); ?> />
+                                    <?php echo esc_html( $desc ); ?>
+                                </label>
+                            <?php endforeach; ?>
+                            <p class="description">Seleziona le tabelle da sincronizzare automaticamente ogni notte.</p>
+                        </td>
+                    </tr>
+                    <tr>
+                        <th scope="row">Sincronizzazione automatica</th>
+                        <td>
+                            <label>
+                                <input type="checkbox" name="farmadati_wc_options[auto_sync]" value="1"
+                                    <?php checked( ! empty( $options['auto_sync'] ) ); ?> />
+                                Attiva sincronizzazione giornaliera automatica (ogni notte alle 3:00)
+                            </label>
+                        </td>
+                    </tr>
+                </table>
+
+                <?php submit_button( 'Salva impostazioni' ); ?>
+            </form>
+
+            <hr>
+            <h2>Test connessione</h2>
+            <p>
+                <button class="button button-secondary" id="farmadati-test-btn">Testa connessione</button>
+            </p>
+            <div id="farmadati-test-result"></div>
+        </div>
+        <?php
+    }
+
+    public static function render_main_page() {
+        $options      = get_option( 'farmadati_wc_options', [] );
+        $default_table = $options['default_table'] ?? 'TE001';
+        $tables = [
+            'TE001' => 'Parafarmaci / Dispositivi Medici',
+            'TE002' => 'Medicinali SOP/OTC',
+            'TE006' => 'Omeopatici',
+            'TE011' => 'Veterinari',
+            'TE015' => 'Veterinari SOP',
+        ];
+        ?>
+        <div class="wrap">
+            <h1>Farmadati – Cerca e Importa Prodotti</h1>
+
+            <?php if ( empty( $options['username'] ) || empty( $options['password'] ) ) : ?>
+                <div class="notice notice-warning">
+                    <p>Configura prima le credenziali Farmadati nelle <a href="<?php echo esc_url( admin_url( 'admin.php?page=farmadati-wc-settings' ) ); ?>">Impostazioni</a>.</p>
+                </div>
+            <?php endif; ?>
+
+            <div class="farmadati-search-box">
+                <table class="form-table" style="max-width:700px;">
+                    <tr>
+                        <th><label for="fd-table">Tabella</label></th>
+                        <td>
+                            <select id="fd-table">
+                                <?php foreach ( $tables as $code => $label ) : ?>
+                                    <option value="<?php echo esc_attr( $code ); ?>" <?php selected( $default_table, $code ); ?>>
+                                        <?php echo esc_html( "$code – $label" ); ?>
+                                    </option>
+                                <?php endforeach; ?>
+                            </select>
+                        </td>
+                    </tr>
+                    <tr>
+                        <th><label for="fd-search-type">Cerca per</label></th>
+                        <td>
+                            <select id="fd-search-type">
+                                <option value="FDI_0004">Nome prodotto</option>
+                                <option value="FDI_0001">Codice PARAF/AIC</option>
+                                <option value="FDI_0002">Codice EAN</option>
+                            </select>
+                        </td>
+                    </tr>
+                    <tr>
+                        <th><label for="fd-search-query">Termine di ricerca</label></th>
+                        <td>
+                            <input type="text" id="fd-search-query" class="regular-text" placeholder="Es: ibuprofene" />
+                        </td>
+                    </tr>
+                    <tr>
+                        <th></th>
+                        <td>
+                            <button class="button button-primary" id="fd-search-btn">Cerca</button>
+                            <span id="fd-search-spinner" class="spinner" style="float:none;margin-top:0;"></span>
+                        </td>
+                    </tr>
+                </table>
+            </div>
+
+            <div id="fd-results-wrap" style="display:none;">
+                <h2>Risultati (<span id="fd-results-count">0</span> prodotti trovati)</h2>
+                <div id="fd-results-notice"></div>
+                <table class="wp-list-table widefat fixed striped" id="fd-results-table">
+                    <thead>
+                        <tr>
+                            <th>Codice PARAF</th>
+                            <th>Nome Prodotto</th>
+                            <th>EAN</th>
+                            <th>Prezzo</th>
+                            <th>IVA</th>
+                            <th>In Commercio</th>
+                            <th>Azione</th>
+                        </tr>
+                    </thead>
+                    <tbody id="fd-results-body"></tbody>
+                </table>
+                <div id="fd-pagination" style="margin-top:10px;"></div>
+            </div>
+        </div>
+        <?php
+    }
+
+    public static function render_sync_page() {
+        $options     = get_option( 'farmadati_wc_options', [] );
+        $last_cron   = get_option( 'farmadati_last_cron_run', 'Mai eseguita' );
+        $cron_log    = get_option( 'farmadati_last_cron_log', [] );
+        $sync_tables = $options['sync_tables'] ?? [ 'TE001' ];
+        ?>
+        <div class="wrap">
+            <h1>Farmadati – Sincronizzazione Prodotti</h1>
+
+            <div class="card" style="max-width:600px;padding:20px;">
+                <h2>Stato sincronizzazione</h2>
+                <p><strong>Ultima esecuzione automatica:</strong> <?php echo esc_html( $last_cron ); ?></p>
+                <p><strong>Prossima esecuzione:</strong>
+                    <?php
+                    $next = wp_next_scheduled( 'farmadati_daily_sync' );
+                    echo $next ? esc_html( date_i18n( 'd/m/Y H:i', $next ) ) : 'Non programmata';
+                    ?>
+                </p>
+
+                <?php if ( ! empty( $cron_log ) ) : ?>
+                    <h3>Ultimo log</h3>
+                    <table class="widefat">
+                        <thead><tr><th>Tabella</th><th>Risultato</th></tr></thead>
+                        <tbody>
+                        <?php foreach ( $cron_log as $table => $result ) : ?>
+                            <tr>
+                                <td><?php echo esc_html( $table ); ?></td>
+                                <td><?php echo esc_html( is_array( $result ) ? json_encode( $result ) : $result ); ?></td>
+                            </tr>
+                        <?php endforeach; ?>
+                        </tbody>
+                    </table>
+                <?php endif; ?>
+            </div>
+
+            <hr>
+            <h2>Sincronizzazione manuale</h2>
+
+            <div class="card" style="max-width:600px;padding:20px;">
+                <p>Avvia manualmente la sincronizzazione per le tabelle selezionate nelle impostazioni.</p>
+                <p>
+                    <label>
+                        <input type="radio" name="fd-sync-type" value="incremental" checked />
+                        Differenziale (solo variazioni dall'ultima sync)
+                    </label>
+                    &nbsp;&nbsp;
+                    <label>
+                        <input type="radio" name="fd-sync-type" value="full" />
+                        Completa (scarica tutta la tabella — può richiedere molto tempo)
+                    </label>
+                </p>
+                <p>
+                    <label><strong>Tabella:</strong>
+                        <select id="fd-sync-table">
+                            <?php foreach ( $sync_tables as $t ) : ?>
+                                <option value="<?php echo esc_attr( $t ); ?>"><?php echo esc_html( $t ); ?></option>
+                            <?php endforeach; ?>
+                        </select>
+                    </label>
+                </p>
+                <button class="button button-primary" id="fd-sync-btn">Avvia sincronizzazione</button>
+                <span id="fd-sync-spinner" class="spinner" style="float:none;margin-top:0;"></span>
+            </div>
+
+            <div id="fd-sync-result" style="margin-top:20px;"></div>
+        </div>
+        <?php
+    }
+
+    // -------------------------------------------------------------------------
+    // AJAX handlers
+    // -------------------------------------------------------------------------
+
+    public static function ajax_test_connection() {
+        check_ajax_referer( 'farmadati_nonce', 'nonce' );
+
+        if ( ! current_user_can( 'manage_options' ) ) {
+            wp_send_json_error( 'Permessi insufficienti.' );
+        }
+
+        $options  = get_option( 'farmadati_wc_options', [] );
+        $username = $options['username'] ?? '';
+        $password = $options['password'] ?? '';
+
+        if ( empty( $username ) || empty( $password ) ) {
+            wp_send_json_error( 'Credenziali non configurate.' );
+        }
+
+        $client = new Farmadati_Client( $username, $password );
+        $result = $client->test_connection();
+
+        if ( is_wp_error( $result ) ) {
+            wp_send_json_error( $result->get_error_message() );
+        }
+
+        wp_send_json_success( 'Connessione riuscita! Credenziali valide.' );
+    }
+
+    public static function ajax_search() {
+        check_ajax_referer( 'farmadati_nonce', 'nonce' );
+
+        if ( ! current_user_can( 'manage_woocommerce' ) ) {
+            wp_send_json_error( 'Permessi insufficienti.' );
+        }
+
+        $table       = sanitize_text_field( $_POST['table'] ?? 'TE001' );
+        $field_key   = sanitize_text_field( $_POST['field_key'] ?? 'FDI_0004' );
+        $query       = sanitize_text_field( $_POST['query'] ?? '' );
+        $page        = max( 1, (int) ( $_POST['page'] ?? 1 ) );
+
+        if ( empty( $query ) ) {
+            wp_send_json_error( 'Termine di ricerca mancante.' );
+        }
+
+        $options  = get_option( 'farmadati_wc_options', [] );
+        $username = $options['username'] ?? '';
+        $password = $options['password'] ?? '';
+
+        if ( empty( $username ) || empty( $password ) ) {
+            wp_send_json_error( 'Credenziali Farmadati non configurate.' );
+        }
+
+        $client  = new Farmadati_Client( $username, $password );
+
+        // Determina l'operatore in base al campo
+        $operator = in_array( $field_key, [ 'FDI_0001', 'FDI_0002' ], true ) ? '=' : 'CONTIENE';
+
+        $result = $client->execute_query(
+            $table,
+            [ 'FDI_0001', 'FDI_0002', 'FDI_0004', 'FDI_9007', 'FDI_0248', 'FDI_0245', 'FDI_0040' ],
+            [ [ 'key' => $field_key, 'operator' => $operator, 'value' => $query, 'or_group' => 0 ] ],
+            [ [ 'key' => 'FDI_0004', 'order_type' => 'CRESCENTE' ] ],
+            $page,
+            20
+        );
+
+        if ( is_wp_error( $result ) ) {
+            wp_send_json_error( $result->get_error_message() );
+        }
+
+        // Arricchisci con info su prodotti già importati
+        foreach ( $result['records'] as &$rec ) {
+            $sku               = $rec['FDI_0001'] ?? '';
+            $existing_id       = $sku ? wc_get_product_id_by_sku( $sku ) : 0;
+            $rec['_wc_id']     = $existing_id ?: null;
+            $rec['_wc_edit']   = $existing_id ? get_edit_post_link( $existing_id ) : null;
+        }
+        unset( $rec );
+
+        wp_send_json_success( $result );
+    }
+
+    public static function ajax_import_product() {
+        check_ajax_referer( 'farmadati_nonce', 'nonce' );
+
+        if ( ! current_user_can( 'manage_woocommerce' ) ) {
+            wp_send_json_error( 'Permessi insufficienti.' );
+        }
+
+        $table   = sanitize_text_field( $_POST['table'] ?? 'TE001' );
+        $raw     = $_POST['record'] ?? [];
+
+        // Sanifica i campi del record
+        $record = [];
+        foreach ( $raw as $k => $v ) {
+            $key = sanitize_key( $k );
+            $record[ $key ] = sanitize_text_field( $v );
+        }
+
+        $product_id = Farmadati_Sync::import_product( $record, $table );
+
+        if ( is_wp_error( $product_id ) ) {
+            wp_send_json_error( $product_id->get_error_message() );
+        }
+
+        wp_send_json_success( [
+            'product_id' => $product_id,
+            'edit_link'  => get_edit_post_link( $product_id, 'url' ),
+            'view_link'  => get_permalink( $product_id ),
+        ] );
+    }
+
+    public static function ajax_run_sync() {
+        check_ajax_referer( 'farmadati_nonce', 'nonce' );
+
+        if ( ! current_user_can( 'manage_woocommerce' ) ) {
+            wp_send_json_error( 'Permessi insufficienti.' );
+        }
+
+        // Aumenta i limiti per operazioni lunghe
+        set_time_limit( 600 );
+        if ( function_exists( 'wp_raise_memory_limit' ) ) {
+            wp_raise_memory_limit( 'admin' );
+        }
+
+        $type  = sanitize_text_field( $_POST['sync_type'] ?? 'incremental' );
+        $table = sanitize_text_field( $_POST['table'] ?? 'TE001' );
+
+        if ( $type === 'full' ) {
+            $result = Farmadati_Sync::full_import( $table );
+        } else {
+            $result = Farmadati_Sync::incremental_sync( $table );
+        }
+
+        if ( is_wp_error( $result ) ) {
+            wp_send_json_error( $result->get_error_message() );
+        }
+
+        wp_send_json_success( $result );
+    }
+}

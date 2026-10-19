@@ -1,0 +1,135 @@
+/* Farmadati WooCommerce – Admin styles */
+
+/* Page header */
+.farmadati-wrap h1 {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+/* Settings sections */
+.farmadati-section {
+    background: #fff;
+    border: 1px solid #c3c4c7;
+    border-radius: 3px;
+    padding: 16px 20px;
+    margin-bottom: 20px;
+}
+
+.farmadati-section h2 {
+    margin-top: 0;
+    padding-top: 0;
+    border-bottom: 1px solid #eee;
+    padding-bottom: 10px;
+}
+
+/* Connection test */
+#farmadati-connection-result {
+    margin-top: 10px;
+    display: none;
+}
+
+/* Search form */
+#farmadati-search-form .farmadati-search-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    align-items: flex-end;
+    margin-bottom: 12px;
+}
+
+#farmadati-search-form label {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    font-weight: 600;
+    font-size: 13px;
+}
+
+#farmadati-search-form select,
+#farmadati-search-form input[type="text"] {
+    min-width: 180px;
+}
+
+/* Results table */
+.farmadati-results {
+    margin-top: 16px;
+    table-layout: fixed;
+}
+
+.farmadati-results th:nth-child(1),
+.farmadati-results td:nth-child(1) { width: 130px; }
+
+.farmadati-results th:nth-child(3),
+.farmadati-results td:nth-child(3) { width: 90px; }
+
+.farmadati-results th:nth-child(4),
+.farmadati-results td:nth-child(4) { width: 110px; }
+
+.farmadati-results th:nth-child(5),
+.farmadati-results td:nth-child(5) { width: 170px; }
+
+/* Commerce status badges */
+.farmadati-badge {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 10px;
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: .4px;
+}
+
+.farmadati-badge--on {
+    background: #d1fae5;
+    color: #065f46;
+}
+
+.farmadati-badge--off {
+    background: #fee2e2;
+    color: #991b1b;
+}
+
+/* Pagination */
+.farmadati-pagination {
+    margin-top: 12px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+/* Sync page */
+#farmadati-sync-log {
+    margin-top: 16px;
+}
+
+#farmadati-sync-log table {
+    width: 100%;
+}
+
+/* Spinner alignment */
+.farmadati-spinner-wrap {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    vertical-align: middle;
+}
+
+/* Responsive */
+@media (max-width: 782px) {
+    #farmadati-search-form .farmadati-search-row {
+        flex-direction: column;
+    }
+
+    #farmadati-search-form select,
+    #farmadati-search-form input[type="text"] {
+        min-width: 100%;
+    }
+
+    .farmadati-results th:nth-child(3),
+    .farmadati-results td:nth-child(3),
+    .farmadati-results th:nth-child(4),
+    .farmadati-results td:nth-child(4) {
+        display: none;
+    }
+}
