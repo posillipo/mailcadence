@@ -18,6 +18,7 @@ class Farmadati_Admin {
         add_action( 'wp_ajax_farmadati_csv_sync', [ __CLASS__, 'ajax_csv_sync' ] );
         add_action( 'wp_ajax_farmadati_csv_enrich', [ __CLASS__, 'ajax_csv_enrich' ] );
         add_action( 'wp_ajax_farmadati_reset_enrich', [ __CLASS__, 'ajax_reset_enrich_errors' ] );
+        add_action( 'wp_ajax_farmadati_enrich_images', [ __CLASS__, 'ajax_enrich_images' ] );
         add_action( 'admin_post_farmadati_upload_csv', [ __CLASS__, 'handle_csv_upload' ] );
     }
 
@@ -669,6 +670,11 @@ class Farmadati_Admin {
                             title="Cancella tutti i meta _farmadati_enriched e _farmadati_enrich_error così ogni prodotto viene rielaborato da capo">
                         Resetta arricchimento (riparti da capo)
                     </button>
+                    <button class="button button-secondary" id="fd-images-only-btn"
+                            style="margin-left:8px;"
+                            title="Solo per prodotti già arricchiti ma privi di immagine (utile dopo correzione bug immagini)">
+                        Aggiungi immagini mancanti
+                    </button>
                     <span id="fd-enrich-spinner" class="spinner" style="float:none;vertical-align:middle;"></span>
                 </p>
                 <div id="fd-enrich-progress" style="margin-top:12px;display:none;">
@@ -731,6 +737,24 @@ class Farmadati_Admin {
 
         $deleted = Farmadati_CSV_Sync::reset_enrich_errors();
         wp_send_json_success( [ 'deleted' => $deleted, 'message' => "Reset completato: $deleted meta cancellati. I prodotti verranno riarricchiti al prossimo avvio." ] );
+    }
+
+    public static function ajax_enrich_images() {
+        check_ajax_referer( 'farmadati_nonce', 'nonce' );
+
+        if ( ! current_user_can( 'manage_woocommerce' ) ) {
+            wp_send_json_error( 'Permessi insufficienti.' );
+        }
+
+        set_time_limit( 120 );
+
+        $result = Farmadati_CSV_Sync::enrich_images_batch();
+
+        if ( is_wp_error( $result ) ) {
+            wp_send_json_error( $result->get_error_message() );
+        }
+
+        wp_send_json_success( $result );
     }
 
     public static function handle_csv_upload() {

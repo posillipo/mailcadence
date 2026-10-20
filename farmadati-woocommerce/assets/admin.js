@@ -504,4 +504,46 @@
         });
     });
 
+    // -------------------------------------------------------------------------
+    // Aggiungi immagini mancanti (image-only batch)
+    // -------------------------------------------------------------------------
+    $(document).on('click', '#fd-images-only-btn', function () {
+        var $btn    = $(this);
+        var $result = $('#fd-enrich-result');
+
+        $btn.prop('disabled', true).text('Elaborazione immagini…');
+        $result.html('');
+
+        function runBatch() {
+            $.post(farmadatiAjax.ajaxurl, {
+                action: 'farmadati_enrich_images',
+                nonce:  farmadatiAjax.nonce
+            })
+            .done(function (res) {
+                if (!res.success) {
+                    $result.html('<div class="notice notice-error" style="margin:0;"><p>' + escHtml(res.data) + '</p></div>');
+                    $btn.prop('disabled', false).text('Aggiungi immagini mancanti');
+                    return;
+                }
+                var d = res.data;
+                var msg = 'Allegate: ' + d.attached + ' | Saltate: ' + d.skipped + ' | Rimanenti: ' + d.remaining;
+                $result.html('<div class="notice notice-success" style="margin:0;"><p>' + escHtml(msg) + '</p></div>');
+
+                if (d.remaining > 0) {
+                    $btn.text('Elaborazione immagini… (' + d.remaining + ' rimanenti)');
+                    setTimeout(runBatch, 800);
+                } else {
+                    $btn.prop('disabled', false).text('Aggiungi immagini mancanti');
+                    $result.html('<div class="notice notice-success" style="margin:0;"><p>Completato! ' + escHtml(msg) + '</p></div>');
+                }
+            })
+            .fail(function () {
+                $result.html('<div class="notice notice-error" style="margin:0;"><p>Errore di comunicazione.</p></div>');
+                $btn.prop('disabled', false).text('Aggiungi immagini mancanti');
+            });
+        }
+
+        runBatch();
+    });
+
 }(jQuery));

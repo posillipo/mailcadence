@@ -382,6 +382,24 @@ class Farmadati_CSV_Sync {
             return $tmp;
         }
 
+        // Validate file is a real image before sideloading.
+        // Farmadati returns HTTP 200 with an Italian text error for missing images.
+        $size = @filesize( $tmp );
+        if ( $size === false || $size < 500 ) {
+            @unlink( $tmp );
+            return new WP_Error( 'image_too_small', "File immagine troppo piccolo ($size byte) — probabilmente non disponibile." );
+        }
+
+        $header = @file_get_contents( $tmp, false, null, 0, 12 );
+        $is_jpeg = ( substr( $header, 0, 3 ) === "\xFF\xD8\xFF" );
+        $is_png  = ( substr( $header, 0, 4 ) === "\x89PNG" );
+        $is_gif  = ( substr( $header, 0, 4 ) === 'GIF8' );
+        $is_tiff = ( substr( $header, 0, 4 ) === "II*\x00" || substr( $header, 0, 4 ) === "MM\x00*" );
+        if ( ! $is_jpeg && ! $is_png && ! $is_gif && ! $is_tiff ) {
+            @unlink( $tmp );
+            return new WP_Error( 'not_an_image', 'Il file scaricato non è un\'immagine valida (JPEG/PNG/GIF/TIFF).' );
+        }
+
         $file_array = [
             'name'     => $filename,
             'tmp_name' => $tmp,
@@ -558,6 +576,93 @@ class Farmadati_CSV_Sync {
         );
 
         return $deleted;
+    }
+
+    /**
+     * Batch image-only: tenta di allegare l'immagine ai prodotti già arricchiti
+     * ma privi di thumbnail (es. primo giro fallito per file non-immagine).
+     *
+     * @param int $limit
+     * @return array [ 'attached' => int, 'skipped' => int, 'remaining' => int, 'log' => array ]
+     */
+    public static function enrich_images_batch( $limit = self::ENRICH_BATCH ) {
+        $options  = get_option( 'farmadati_wc_options', [] );
+        $username = $options['username'] ?? '';
+        $password = $options['password'] ?? '';
+
+        if ( empty( $username ) || empty( $password ) ) {
+            return new WP_Error( 'no_credentials', 'Credenziali Farmadati non configurate.' );
+        }
+
+        // Prodotti arricchiti ma senza thumbnail
+        $args = [
+            'post_type'      => 'product',
+            'post_status'    => [ 'publish', 'draft' ],
+            'posts_per_page' => (int) min( $limit, self::ENRICH_BATCH ),
+            'fields'         => 'ids',
+            'meta_query'     => [
+                'relation' => 'AND',
+                [ 'key' => '_farmadati_csv_sync', 'compare' => 'EXISTS' ],
+                [ 'key' => '_farmadati_enriched', 'compare' => 'EXISTS' ],
+                [ 'key' => '_thumbnail_id',       'compare' => 'NOT EXISTS' ],
+            ],
+        ];
+
+        $q      = new WP_Query( $args );
+        $client = new Farmadati_Client( $username, $password );
+        $stats  = [ 'attached' => 0, 'skipped' => 0, 'log' => [] ];
+
+        foreach ( $q->posts as $product_id ) {
+            $product = wc_get_product( $product_id );
+            $sku     = $product ? $product->get_sku() : '';
+
+            if ( empty( $sku ) ) {
+                $stats['skipped']++;
+                continue;
+            }
+
+            $img = self::attach_farmadati_image( $product_id, $sku . '.jpg', 'TE009', $client );
+
+            // Fallback: prova il filename salvato dal record SOAP
+            if ( is_wp_error( $img ) ) {
+                $fd_table    = get_post_meta( $product_id, '_farmadati_table', true );
+                $foto_soap   = get_post_meta( $product_id, '_farmadati_image_filename', true );
+                if ( ! empty( $foto_soap ) && ! empty( $fd_table ) ) {
+                    $img = self::attach_farmadati_image( $product_id, $foto_soap, $fd_table, $client );
+                }
+            }
+
+            // Fallback: campo FotoFarmadati dal CSV
+            if ( is_wp_error( $img ) ) {
+                $foto_csv = get_post_meta( $product_id, '_farmadati_foto_csv', true );
+                if ( ! empty( $foto_csv ) ) {
+                    $img = self::attach_farmadati_image( $product_id, $foto_csv, 'TE009', $client );
+                }
+            }
+
+            if ( is_wp_error( $img ) ) {
+                $stats['skipped']++;
+                $stats['log'][] = "AIC $sku: " . $img->get_error_message();
+            } else {
+                $stats['attached']++;
+            }
+        }
+
+        $remaining_q = new WP_Query( [
+            'post_type'      => 'product',
+            'post_status'    => [ 'publish', 'draft' ],
+            'posts_per_page' => 1,
+            'fields'         => 'ids',
+            'meta_query'     => [
+                'relation' => 'AND',
+                [ 'key' => '_farmadati_csv_sync', 'compare' => 'EXISTS' ],
+                [ 'key' => '_farmadati_enriched', 'compare' => 'EXISTS' ],
+                [ 'key' => '_thumbnail_id',       'compare' => 'NOT EXISTS' ],
+            ],
+        ] );
+        $stats['remaining'] = (int) $remaining_q->found_posts;
+
+        return $stats;
     }
 
     // =========================================================================
