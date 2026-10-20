@@ -507,7 +507,7 @@ class Farmadati_Client {
             $dom->loadXML( '<?xml version="1.0" encoding="utf-8"?><root>' . $xml . '</root>', LIBXML_NOERROR | LIBXML_NOWARNING );
             $rows = $dom->getElementsByTagName( 'Record' );
 
-            if ( $rows->length === 0 ) {
+            if ( $rows->length === 0 && $dom->documentElement !== null ) {
                 // Alcuni output wrappano diversamente
                 $rows = $dom->documentElement->childNodes;
             }

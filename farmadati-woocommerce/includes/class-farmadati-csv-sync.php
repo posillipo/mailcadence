@@ -302,11 +302,17 @@ class Farmadati_CSV_Sync {
         // Ordine di preferenza: TE001 copre la maggior parte, poi gli altri
         $tables = [ 'TE001', 'TE003', 'TE004', 'TE005', 'TE009', 'TE008', 'TE006' ];
 
+        // Campo AIC per tabella: TE009 usa FDI_0840 ("Codice prodotto TE009"), le altre FDI_0001
+        $aic_field_map = [
+            'TE009' => 'FDI_0840',
+        ];
+
         foreach ( $tables as $table ) {
+            $aic_field = $aic_field_map[ $table ] ?? 'FDI_0001';
             $result = $client->execute_query(
                 $table,
                 [ 'ALL' ],
-                [ [ 'key' => 'FDI_0001', 'operator' => '=', 'value' => $aic, 'or_group' => 0 ] ],
+                [ [ 'key' => $aic_field, 'operator' => '=', 'value' => $aic, 'or_group' => 0 ] ],
                 [],
                 1,
                 1
