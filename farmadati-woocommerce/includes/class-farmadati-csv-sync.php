@@ -402,46 +402,58 @@ class Farmadati_CSV_Sync {
     /**
      * Arricchisce un prodotto con i dati Farmadati (nome, desc, immagine).
      *
+     * Strategia immagine (in ordine):
+     *   1. AIC.jpg con tipodoc TE009 — funziona anche senza record SOAP
+     *   2. Filename trovato nel record SOAP (se disponibile)
+     *   3. Campo FotoFarmadati del CSV
+     *
+     * Il prodotto viene sempre marcato come arricchito al termine, così
+     * non viene ritentato indefinitamente. _farmadati_enrich_error è
+     * riservato a errori fatali (prodotto non in DB, SKU mancante).
+     *
      * @param  int              $product_id
      * @param  string           $aic
      * @param  Farmadati_Client $client
      * @return true|WP_Error
      */
     public static function enrich_product( $product_id, $aic, $client ) {
-        $fd = self::fetch_farmadati_data( $aic, $client );
-
-        if ( is_wp_error( $fd ) ) {
-            // Salva il messaggio di errore per non ritentare all'infinito
-            update_post_meta( $product_id, '_farmadati_enrich_error', $fd->get_error_message() );
-            return $fd;
-        }
-
         $product = wc_get_product( $product_id );
         if ( ! $product ) {
             return new WP_Error( 'product_not_found', "Prodotto $product_id non trovato." );
         }
 
-        if ( ! empty( $fd['name'] ) ) {
-            $product->set_name( $fd['name'] );
-        }
-        if ( ! empty( $fd['description'] ) ) {
-            $product->set_description( $fd['description'] );
+        // Tenta arricchimento SOAP (nome, descrizione) — best effort, non blocca
+        $fd = self::fetch_farmadati_data( $aic, $client );
+
+        if ( ! is_wp_error( $fd ) ) {
+            if ( ! empty( $fd['name'] ) ) {
+                $product->set_name( $fd['name'] );
+            }
+            if ( ! empty( $fd['description'] ) ) {
+                $product->set_description( $fd['description'] );
+            }
+            $product->update_meta_data( '_farmadati_table', $fd['table'] );
         }
 
+        // Marca sempre come arricchito (anche se SOAP ha fallito)
         $product->update_meta_data( '_farmadati_enriched', current_time( 'mysql' ) );
-        $product->update_meta_data( '_farmadati_table', $fd['table'] );
         $product->save();
 
         // Immagine (solo se il prodotto non ce l'ha già)
         if ( ! has_post_thumbnail( $product_id ) ) {
-            // 1. Immagine trovata nel record Farmadati
-            if ( ! empty( $fd['image_filename'] ) ) {
-                self::attach_farmadati_image( $product_id, $fd['image_filename'], $fd['table'], $client );
-            } else {
-                // 2. Immagine referenziata nel CSV (campo FotoFarmadati)
+            // 1. AIC.jpg con tipodoc TE009 — il server Farmadati risponde 200
+            $img = self::attach_farmadati_image( $product_id, $aic . '.jpg', 'TE009', $client );
+
+            // 2. Filename trovato nel record SOAP (fallback)
+            if ( is_wp_error( $img ) && ! is_wp_error( $fd ) && ! empty( $fd['image_filename'] ) ) {
+                $img = self::attach_farmadati_image( $product_id, $fd['image_filename'], $fd['table'], $client );
+            }
+
+            // 3. Campo FotoFarmadati del CSV (fallback finale)
+            if ( is_wp_error( $img ) ) {
                 $foto_csv = get_post_meta( $product_id, '_farmadati_foto_csv', true );
                 if ( ! empty( $foto_csv ) ) {
-                    self::attach_farmadati_image( $product_id, $foto_csv, $fd['table'], $client );
+                    self::attach_farmadati_image( $product_id, $foto_csv, 'TE009', $client );
                 }
             }
         }
@@ -529,6 +541,23 @@ class Farmadati_CSV_Sync {
         $stats['remaining'] = (int) $remaining_q->found_posts;
 
         return $stats;
+    }
+
+    /**
+     * Cancella tutti i meta _farmadati_enrich_error e _farmadati_enriched
+     * così i prodotti vengono re-arricchiti al prossimo batch.
+     *
+     * @return int  Numero di prodotti resettati
+     */
+    public static function reset_enrich_errors() {
+        global $wpdb;
+
+        $deleted = (int) $wpdb->query(
+            "DELETE FROM {$wpdb->postmeta}
+             WHERE meta_key IN ('_farmadati_enrich_error', '_farmadati_enriched')"
+        );
+
+        return $deleted;
     }
 
     // =========================================================================

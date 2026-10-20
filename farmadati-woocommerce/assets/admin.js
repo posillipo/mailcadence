@@ -468,4 +468,40 @@
         );
     });
 
+    // -------------------------------------------------------------------------
+    // Reset arricchimento
+    // -------------------------------------------------------------------------
+    $(document).on('click', '#fd-enrich-reset-btn', function () {
+        if (!confirm('Sei sicuro? Verranno cancellati tutti i meta di arricchimento e ogni prodotto verrà rielaborato da capo (immagini incluse).')) {
+            return;
+        }
+
+        var $btn = $(this);
+        $btn.prop('disabled', true).text('Reset in corso…');
+
+        $.post(farmadatiAjax.ajaxurl, {
+            action: 'farmadati_reset_enrich',
+            nonce:  farmadatiAjax.nonce
+        })
+        .done(function (res) {
+            if (res.success) {
+                $('#fd-enrich-result').html(
+                    '<div class="notice notice-success" style="margin:0;"><p>' + escHtml(res.data.message) + '</p></div>'
+                );
+            } else {
+                $('#fd-enrich-result').html(
+                    '<div class="notice notice-error" style="margin:0;"><p>' + escHtml(res.data) + '</p></div>'
+                );
+            }
+        })
+        .fail(function () {
+            $('#fd-enrich-result').html(
+                '<div class="notice notice-error" style="margin:0;"><p>Errore di comunicazione.</p></div>'
+            );
+        })
+        .always(function () {
+            $btn.prop('disabled', false).text('Resetta arricchimento (riparti da capo)');
+        });
+    });
+
 }(jQuery));
