@@ -505,9 +505,8 @@ class Farmadati_Client {
         try {
             $dom = new DOMDocument();
 
-            // Rimuove la dichiarazione <?xml?> se già presente nel payload
-            // (Farmadati TE009 restituisce XML completo con dichiarazione propria;
-            // aggiungerne una seconda renderebbe il documento non valido)
+            // Rimuove la dichiarazione XML iniziale se già presente nel payload
+            // (TE009 restituisce XML completo; aggiungerne una seconda lo renderebbe invalido)
             $clean = preg_replace( '/^\s*<\?xml[^?]*\?>\s*/i', '', trim( $xml ) );
             $dom->loadXML(
                 '<?xml version="1.0" encoding="utf-8"?><root>' . $clean . '</root>',
