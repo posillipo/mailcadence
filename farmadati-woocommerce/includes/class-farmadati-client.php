@@ -504,18 +504,31 @@ class Farmadati_Client {
 
         try {
             $dom = new DOMDocument();
-            $dom->loadXML( '<?xml version="1.0" encoding="utf-8"?><root>' . $xml . '</root>', LIBXML_NOERROR | LIBXML_NOWARNING );
+
+            // Rimuove la dichiarazione <?xml?> se già presente nel payload
+            // (Farmadati TE009 restituisce XML completo con dichiarazione propria;
+            // aggiungerne una seconda renderebbe il documento non valido)
+            $clean = preg_replace( '/^\s*<\?xml[^?]*\?>\s*/i', '', trim( $xml ) );
+            $dom->loadXML(
+                '<?xml version="1.0" encoding="utf-8"?><root>' . $clean . '</root>',
+                LIBXML_NOERROR | LIBXML_NOWARNING
+            );
+
+            if ( ! $dom->documentElement ) {
+                throw new Exception( 'XML non valido o vuoto' );
+            }
+
+            // Prima prova il tag standard <Record>
             $rows = $dom->getElementsByTagName( 'Record' );
 
-            if ( $rows->length === 0 && $dom->documentElement !== null ) {
-                // Alcuni output wrappano diversamente
-                $rows = $dom->documentElement->childNodes;
+            if ( $rows->length === 0 ) {
+                // Fallback: trova qualsiasi elemento con figli FDI_*
+                // (TE009 usa <Product>, altre tabelle potrebbero usare tag diversi)
+                $xpath = new DOMXPath( $dom );
+                $rows  = $xpath->query( '//*[*[starts-with(local-name(), "FDI_")]]' );
             }
 
             foreach ( $rows as $row ) {
-                if ( $row->nodeType !== XML_ELEMENT_NODE ) {
-                    continue;
-                }
                 $record = [];
                 foreach ( $row->childNodes as $field ) {
                     if ( $field->nodeType === XML_ELEMENT_NODE ) {

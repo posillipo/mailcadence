@@ -465,15 +465,37 @@ class Farmadati_CSV_Sync {
 
         // Immagine (solo se il prodotto non ce l'ha già)
         if ( ! has_post_thumbnail( $product_id ) ) {
-            // 1. AIC.jpg con tipodoc TE009 — il server Farmadati risponde 200
-            $img = self::attach_farmadati_image( $product_id, $aic . '.jpg', 'TE009', $client );
+            // 0. Ottieni il filename reale da TE009 (FDI_0843) — query dedicata
+            //    fetch_farmadati_data può restituire da TE001 senza passare per TE009;
+            //    TE009 è la tabella documenti e contiene il nome file immagine in FDI_0843
+            $te009_filename = '';
+            $te009_res = $client->execute_query(
+                'TE009', [ 'ALL' ],
+                [ [ 'key' => 'FDI_0840', 'operator' => '=', 'value' => $aic, 'or_group' => 0 ] ],
+                [], 1, 1
+            );
+            if ( ! is_wp_error( $te009_res ) && ! empty( $te009_res['records'][0]['FDI_0843'] ) ) {
+                $te009_filename = $te009_res['records'][0]['FDI_0843'];
+                update_post_meta( $product_id, '_farmadati_image_filename', $te009_filename );
+                update_post_meta( $product_id, '_farmadati_table', 'TE009' );
+            }
 
-            // 2. Filename trovato nel record SOAP (fallback)
+            // 1. Filename da TE009 (fonte più precisa)
+            $img = $te009_filename
+                ? self::attach_farmadati_image( $product_id, $te009_filename, 'TE009', $client )
+                : new WP_Error( 'no_te009_filename', 'Nessun filename in TE009.' );
+
+            // 2. AIC.jpg come fallback (alcune tabelle lo supportano)
+            if ( is_wp_error( $img ) ) {
+                $img = self::attach_farmadati_image( $product_id, $aic . '.jpg', 'TE009', $client );
+            }
+
+            // 3. Filename trovato nel record SOAP generale (fallback)
             if ( is_wp_error( $img ) && ! is_wp_error( $fd ) && ! empty( $fd['image_filename'] ) ) {
                 $img = self::attach_farmadati_image( $product_id, $fd['image_filename'], $fd['table'], $client );
             }
 
-            // 3. Campo FotoFarmadati del CSV (fallback finale)
+            // 4. Campo FotoFarmadati del CSV (fallback finale)
             if ( is_wp_error( $img ) ) {
                 $foto_csv = get_post_meta( $product_id, '_farmadati_foto_csv', true );
                 if ( ! empty( $foto_csv ) ) {
@@ -627,18 +649,41 @@ class Farmadati_CSV_Sync {
                 continue;
             }
 
-            $img = self::attach_farmadati_image( $product_id, $sku . '.jpg', 'TE009', $client );
+            // 0. Query TE009 dedicata per FDI_0843 (filename reale)
+            $te009_filename = get_post_meta( $product_id, '_farmadati_image_filename', true );
+            if ( empty( $te009_filename ) ) {
+                $te009_res = $client->execute_query(
+                    'TE009', [ 'ALL' ],
+                    [ [ 'key' => 'FDI_0840', 'operator' => '=', 'value' => $sku, 'or_group' => 0 ] ],
+                    [], 1, 1
+                );
+                if ( ! is_wp_error( $te009_res ) && ! empty( $te009_res['records'][0]['FDI_0843'] ) ) {
+                    $te009_filename = $te009_res['records'][0]['FDI_0843'];
+                    update_post_meta( $product_id, '_farmadati_image_filename', $te009_filename );
+                    update_post_meta( $product_id, '_farmadati_table', 'TE009' );
+                }
+            }
 
-            // Fallback: prova il filename salvato dal record SOAP
+            // 1. Filename reale da TE009
+            $img = $te009_filename
+                ? self::attach_farmadati_image( $product_id, $te009_filename, 'TE009', $client )
+                : new WP_Error( 'no_te009_filename', 'Nessun filename in TE009.' );
+
+            // 2. AIC.jpg come fallback
             if ( is_wp_error( $img ) ) {
-                $fd_table    = get_post_meta( $product_id, '_farmadati_table', true );
-                $foto_soap   = get_post_meta( $product_id, '_farmadati_image_filename', true );
+                $img = self::attach_farmadati_image( $product_id, $sku . '.jpg', 'TE009', $client );
+            }
+
+            // 3. Filename salvato da precedenti run SOAP
+            if ( is_wp_error( $img ) ) {
+                $fd_table  = get_post_meta( $product_id, '_farmadati_table', true );
+                $foto_soap = get_post_meta( $product_id, '_farmadati_image_filename', true );
                 if ( ! empty( $foto_soap ) && ! empty( $fd_table ) ) {
                     $img = self::attach_farmadati_image( $product_id, $foto_soap, $fd_table, $client );
                 }
             }
 
-            // Fallback: campo FotoFarmadati dal CSV
+            // 4. Campo FotoFarmadati dal CSV
             if ( is_wp_error( $img ) ) {
                 $foto_csv = get_post_meta( $product_id, '_farmadati_foto_csv', true );
                 if ( ! empty( $foto_csv ) ) {
